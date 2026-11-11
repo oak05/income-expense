@@ -1,0 +1,25 @@
+[project]
+name = "income-expense-app"
+version = "1.2.1"
+description = "Personal income/expense tracker with receipt OCR, packaged for Docker Desktop"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["app/static"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+  "B008",  # FastAPI uses Query(...) in argument defaults
+  "E501",  # long Thai strings and SQL read better unwrapped
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

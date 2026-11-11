@@ -1,0 +1,22 @@
+name: income-expense
+
+services:
+  app:
+    build: .
+    # local build by default; set APP_IMAGE in .env to use the image CI publishes to GHCR
+    image: ${APP_IMAGE:-income-expense-app:latest}
+    container_name: income-expense-app
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:8000"
+    environment:
+      APP_USER: ${APP_USER:-admin}
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
+      TZ: Asia/Bangkok
+    volumes:
+      - finance-data:/data
+
+volumes:
+  finance-data:
+    name: income-expense-data

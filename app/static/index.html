@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>สมุดรายรับรายจ่าย</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='3' width='24' height='26' rx='3' fill='%231D2B45'/%3E%3Crect x='9' y='9' width='14' height='2' fill='%23C9A44C'/%3E%3Crect x='9' y='14' width='10' height='2' fill='%23C9A44C'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css?v=1.2.1">
+</head>
+<body>
+  <a class="skip" href="#ledger-panel">ข้ามไปที่รายการ</a>
+
+  <header class="cover">
+    <div class="cover-inner">
+      <h1 class="brand">สมุดรายรับรายจ่าย</h1>
+
+      <nav class="month-nav" aria-label="เลือกเดือน">
+        <button class="icon-btn" id="prev-month" type="button" aria-label="เดือนก่อน">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <label class="month-label">
+          <span id="month-text">—</span>
+          <input type="month" id="month-input" aria-label="เลือกเดือน">
+        </label>
+        <button class="icon-btn" id="next-month" type="button" aria-label="เดือนถัดไป">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
+        <button class="text-btn" id="this-month" type="button">เดือนนี้</button>
+      </nav>
+
+      <div class="cover-actions">
+        <a class="text-btn nav-link" href="/receipts.html">สแกนใบเสร็จ</a>
+        <button class="text-btn" id="open-categories" type="button">หมวดหมู่</button>
+        <button class="text-btn" id="open-data" type="button">นำเข้า / สำรองข้อมูล</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="totals" aria-label="สรุปยอดเดือนนี้">
+    <div class="total">
+      <span class="total-label">รายรับ</span>
+      <span class="total-value in" id="t-income">0.00</span>
+      <span class="total-note" id="t-income-note"></span>
+    </div>
+    <div class="total">
+      <span class="total-label">รายจ่าย</span>
+      <span class="total-value out" id="t-expense">0.00</span>
+      <span class="total-note" id="t-expense-note"></span>
+    </div>
+    <div class="total">
+      <span class="total-label">เหลือเดือนนี้</span>
+      <span class="total-value" id="t-balance">0.00</span>
+      <span class="total-note" id="t-balance-note"></span>
+    </div>
+    <div class="total">
+      <span class="total-label">ยอดคงเหลือสะสม</span>
+      <span class="total-value" id="t-cumulative">0.00</span>
+      <span class="total-note">ณ สิ้นเดือนที่เลือก</span>
+    </div>
+  </section>
+
+  <main class="layout">
+    <!-- Entry form -->
+    <section class="entry" aria-labelledby="entry-title">
+      <form id="tx-form" autocomplete="off" novalidate>
+        <div class="entry-head">
+          <h2 id="entry-title">จดรายการ</h2>
+          <a class="text-btn small" id="edit-receipt-link" href="#" target="_blank" rel="noopener" hidden>ดูใบเสร็จ</a>
+          <button class="text-btn small" type="button" id="cancel-edit" hidden>ยกเลิกการแก้ไข</button>
+        </div>
+
+        <div class="type-switch" role="radiogroup" aria-label="ประเภท">
+          <label class="type-opt out">
+            <input type="radio" name="type" value="expense" checked>
+            <span>รายจ่าย</span>
+          </label>
+          <label class="type-opt in">
+            <input type="radio" name="type" value="income">
+            <span>รายรับ</span>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">จำนวนเงิน (บาท)</span>
+          <input class="amount-input" id="amount" name="amount" inputmode="decimal" placeholder="0.00" required
+                 aria-describedby="amount-hint">
+          <span class="field-hint" id="amount-hint">พิมพ์ 45+60 ได้ ระบบจะรวมให้</span>
+        </label>
+
+        <fieldset class="field">
+          <legend class="field-label">หมวดหมู่</legend>
+          <div class="chips" id="category-chips" role="radiogroup" aria-label="หมวดหมู่"></div>
+        </fieldset>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">วันที่</span>
+            <input type="date" id="date" name="date" required>
+          </label>
+          <div class="quick-dates">
+            <button type="button" class="text-btn small" data-days-ago="0">วันนี้</button>
+            <button type="button" class="text-btn small" data-days-ago="1">เมื่อวาน</button>
+          </div>
+        </div>
+
+        <label class="field">
+          <span class="field-label">หมายเหตุ</span>
+          <input id="note" name="note" maxlength="500" placeholder="เช่น ข้าวกลางวัน, ค่า BTS" list="note-suggestions">
+          <datalist id="note-suggestions"></datalist>
+        </label>
+
+        <p class="form-error" id="form-error" role="alert" hidden></p>
+
+        <div class="entry-actions">
+          <button class="primary-btn" type="submit" id="submit-btn">บันทึกรายจ่าย</button>
+          <button class="danger-btn" type="button" id="delete-btn" hidden>ลบรายการนี้</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Views -->
+    <section class="views">
+      <div class="tabs" role="tablist" aria-label="มุมมอง">
+        <button role="tab" id="tab-ledger" aria-controls="ledger-panel" aria-selected="true">สมุดบัญชี</button>
+        <button role="tab" id="tab-month" aria-controls="month-panel" aria-selected="false" tabindex="-1">สรุปเดือนนี้</button>
+        <button role="tab" id="tab-year" aria-controls="year-panel" aria-selected="false" tabindex="-1">ทั้งปี</button>
+      </div>
+
+      <!-- Ledger -->
+      <div role="tabpanel" id="ledger-panel" aria-labelledby="tab-ledger" tabindex="-1">
+        <div class="filters">
+          <label class="sr-only" for="f-type">ประเภท</label>
+          <select id="f-type">
+            <option value="">ทุกประเภท</option>
+            <option value="expense">รายจ่าย</option>
+            <option value="income">รายรับ</option>
+          </select>
+          <label class="sr-only" for="f-category">หมวดหมู่</label>
+          <select id="f-category"><option value="">ทุกหมวดหมู่</option></select>
+          <label class="sr-only" for="f-q">ค้นหา</label>
+          <input type="search" id="f-q" placeholder="ค้นหาหมายเหตุหรือหมวดหมู่">
+          <a class="text-btn small" id="export-month" href="#" download>ดาวน์โหลด CSV เดือนนี้</a>
+        </div>
+
+        <div class="passbook">
+          <table class="ledger" aria-describedby="ledger-caption">
+            <caption id="ledger-caption" class="sr-only">รายการเดือนที่เลือก คลิกแถวเพื่อแก้ไข</caption>
+            <colgroup>
+              <col class="c-date"><col class="c-desc"><col class="c-num"><col class="c-num"><col class="c-amt"><col class="c-num c-bal">
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">วันที่</th>
+                <th scope="col">รายการ</th>
+                <th scope="col" class="num out">จ่าย</th>
+                <th scope="col" class="num in">รับ</th>
+                <th scope="col" class="num amt">จำนวนเงิน</th>
+                <th scope="col" class="num bal">คงเหลือ</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-body"></tbody>
+          </table>
+          <p class="empty" id="ledger-empty" hidden></p>
+        </div>
+      </div>
+
+      <!-- Month summary -->
+      <div role="tabpanel" id="month-panel" aria-labelledby="tab-month" tabindex="-1" hidden>
+        <div class="summary-grid">
+          <figure class="chart-block">
+            <figcaption>รายจ่ายแยกตามหมวดหมู่</figcaption>
+            <div class="donut-wrap"><canvas id="chart-categories" aria-label="กราฟวงกลมรายจ่ายแยกตามหมวดหมู่" role="img"></canvas></div>
+          </figure>
+          <div class="breakdown">
+            <h3>รายจ่าย</h3>
+            <ol class="bars" id="expense-breakdown"></ol>
+            <h3>รายรับ</h3>
+            <ol class="bars" id="income-breakdown"></ol>
+          </div>
+        </div>
+        <figure class="chart-block wide">
+          <figcaption id="daily-caption">รายจ่ายรายวัน</figcaption>
+          <div class="bar-wrap"><canvas id="chart-daily" aria-label="กราฟแท่งรายจ่ายรายวัน" role="img"></canvas></div>
+        </figure>
+      </div>
+
+      <!-- Year -->
+      <div role="tabpanel" id="year-panel" aria-labelledby="tab-year" tabindex="-1" hidden>
+        <div class="year-totals" id="year-totals"></div>
+        <figure class="chart-block wide">
+          <figcaption id="year-caption">รายรับ–รายจ่ายรายเดือน</figcaption>
+          <div class="bar-wrap tall"><canvas id="chart-year" aria-label="กราฟแท่งรายรับรายจ่ายรายเดือน" role="img"></canvas></div>
+        </figure>
+        <div class="breakdown">
+          <h3>หมวดรายจ่ายสูงสุดของปี</h3>
+          <ol class="bars" id="year-top"></ol>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Categories dialog -->
+  <dialog id="categories-dialog" aria-labelledby="cat-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="cat-title">หมวดหมู่</h2>
+      <button class="icon-btn" value="close" aria-label="ปิด">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </form>
+    <div class="cat-columns">
+      <section>
+        <h3>รายจ่าย</h3>
+        <ul class="cat-list" id="cat-list-expense"></ul>
+      </section>
+      <section>
+        <h3>รายรับ</h3>
+        <ul class="cat-list" id="cat-list-income"></ul>
+      </section>
+    </div>
+    <form id="cat-add-form" class="cat-add" autocomplete="off">
+      <h3>เพิ่มหมวดหมู่</h3>
+      <div class="cat-add-row">
+        <select id="cat-new-type" aria-label="ประเภท">
+          <option value="expense">รายจ่าย</option>
+          <option value="income">รายรับ</option>
+        </select>
+        <input id="cat-new-name" maxlength="50" placeholder="ชื่อหมวดหมู่" aria-label="ชื่อหมวดหมู่" required>
+        <input type="color" id="cat-new-color" value="#5B8DB8" aria-label="สี">
+        <button class="primary-btn" type="submit">เพิ่ม</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Move-and-delete dialog -->
+  <dialog id="cat-delete-dialog" aria-labelledby="cat-del-title">
+    <form method="dialog" id="cat-delete-form">
+      <h2 id="cat-del-title">ลบหมวดหมู่</h2>
+      <p id="cat-del-text"></p>
+      <label class="field">
+        <span class="field-label">ย้ายรายการไปที่</span>
+        <select id="cat-del-target"></select>
+      </label>
+      <div class="dialog-actions">
+        <button class="text-btn" value="cancel">ยกเลิก</button>
+        <button class="danger-btn" value="confirm">ย้ายรายการและลบหมวด</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Data dialog -->
+  <dialog id="data-dialog" aria-labelledby="data-title">
+    <form method="dialog" class="dialog-head">
+      <h2 id="data-title">นำเข้า / สำรองข้อมูล</h2>
+      <button class="icon-btn" value="close" aria-label="ปิด">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </form>
+
+    <section class="data-block">
+      <h3>ไฟล์ CSV (เปิดใน Excel ได้)</h3>
+      <p>ดาวน์โหลดรายการทั้งหมด หรือนำเข้าจากไฟล์ที่มีหัวตาราง วันที่, ประเภท, หมวดหมู่, จำนวนเงิน, หมายเหตุ
+        — รายการที่มีอยู่แล้วจะไม่ถูกเพิ่มซ้ำ</p>
+      <div class="data-actions">
+        <a class="primary-btn" href="/api/export.csv" download>ดาวน์โหลด CSV ทั้งหมด</a>
+        <label class="file-btn">
+          <input type="file" id="import-file" accept=".csv,text/csv">
+          <span>นำเข้า CSV</span>
+        </label>
+      </div>
+      <p class="data-result" id="import-result" role="status"></p>
+    </section>
+
+    <section class="data-block">
+      <h3>ไฟล์สำรองทั้งหมด (.zip)</h3>
+      <p>รวมทุกรายการ หมวดหมู่ และรูปใบเสร็จไว้ในไฟล์เดียว ใช้กู้คืนเมื่อย้ายเครื่องหรือข้อมูลหาย
+        การกู้คืนจะแทนที่ข้อมูลปัจจุบันทั้งหมด (ระบบเก็บสำเนาข้อมูลเดิมไว้ให้อัตโนมัติ) รองรับไฟล์ .db แบบเก่าด้วย</p>
+      <div class="data-actions">
+        <a class="primary-btn" href="/api/backup.zip" download>ดาวน์โหลดไฟล์สำรอง</a>
+        <label class="file-btn danger">
+          <input type="file" id="restore-file" accept=".zip,.db,application/zip,application/octet-stream">
+          <span>กู้คืนจากไฟล์สำรอง</span>
+        </label>
+      </div>
+      <p class="data-result" id="restore-result" role="status"></p>
+    </section>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="/vendor/chart.umd.min.js"></script>
+  <script src="/common.js?v=1.2.1"></script>
+  <script src="/app.js?v=1.2.1"></script>
+</body>
+</html>

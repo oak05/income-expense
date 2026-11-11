@@ -1,0 +1,6 @@
+fastapi==0.162.2
+uvicorn==0.54.0
+tzdata==2026.6
+pillow==13.0.0
+pillow-heif==1.8.1
+pypdfium2==5.13.0

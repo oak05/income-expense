@@ -1,0 +1,13 @@
+.git
+.gitattributes
+.gitignore
+.env
+data/
+backups/
+**/__pycache__/
+*.bat
+*.md
+tests/
+.github/
+requirements-dev.txt
+pyproject.toml
