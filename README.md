@@ -1,16 +1,21 @@
-# สมุดรายรับรายจ่าย (Docker สำหรับ Windows)
+# สมุดรายรับรายจ่าย (สำหรับ Windows)
 
-เว็บแอปบันทึกรายรับรายจ่ายส่วนตัว รันบน Docker Desktop ในเครื่องของคุณเอง
+เว็บแอปบันทึกรายรับรายจ่ายส่วนตัว รันตรงบน Windows ในเครื่องของคุณเอง — ไม่ต้องมี Docker (จะใช้ Docker ก็ได้)
 ข้อมูลเก็บในเครื่อง ไม่ส่งออกไปที่ไหน ใช้งานผ่านเบราว์เซอร์ที่ `http://localhost:8080`
 
 ## ภาพรวม
 
 ```
 income-expense-app/
-├── start.bat            ← ดับเบิลคลิกเพื่อเปิดแอป (build + run + เปิดเบราว์เซอร์)
+├── start.bat            ← ดับเบิลคลิกเพื่อเปิดแอป (ครั้งแรกติดตั้งให้เอง + เปิดเบราว์เซอร์)
 ├── stop.bat             ← ปิดแอป (ข้อมูลยังอยู่)
 ├── backup.bat           ← สำรองข้อมูล + รูปใบเสร็จ ลงโฟลเดอร์ backups\
-├── logs.bat             ← ดู log เวลามีปัญหา
+├── logs.bat             ← ดู log เวลามีปัญหา (ไฟล์ logs\app.log)
+├── setup.bat            ← ติดตั้ง Python, Tesseract, ภาษาไทย (start.bat เรียกให้เองเมื่อจำเป็น)
+├── docker-start.bat     ← (ทางเลือก) เปิดแอปด้วย Docker Desktop
+├── docker-stop.bat      ← (ทางเลือก) ปิดแอปที่รันด้วย Docker
+├── docker-logs.bat      ← (ทางเลือก) ดู log ของ Docker
+├── data\                ← ข้อมูลของคุณ (finance.db + รูปใบเสร็จ)
 ├── .env                 ← ตั้งค่าพอร์ต / รหัสผ่าน / เปิดให้มือถือเข้า
 ├── docker-compose.yml
 ├── Dockerfile
@@ -42,26 +47,29 @@ income-expense-app/
 
 ## สิ่งที่ต้องมี
 
-- Windows 10 หรือ 11
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ใช้ WSL 2 backend ตามค่าเริ่มต้น)
+- Windows 10 หรือ 11 (มี winget — มาพร้อม Windows อยู่แล้ว)
+- อินเทอร์เน็ตตอนเปิดครั้งแรก (ดาวน์โหลด Python และโปรแกรมอ่านใบเสร็จ)
+- **ไม่ต้องมี Docker** และไม่ต้องเปิด Hyper-V / virtualization
 
 ## เริ่มใช้งาน
 
 1. แตกไฟล์ zip ไว้ที่ไหนก็ได้ เช่น `C:\Apps\income-expense-app`
-2. เปิด Docker Desktop รอจนขึ้นว่า **Engine running**
-3. ดับเบิลคลิก **`start.bat`**
-   - ครั้งแรกจะ build image ประมาณ 1–3 นาที
+2. ดับเบิลคลิก **`start.bat`**
+   - ครั้งแรกจะติดตั้งให้เองประมาณ 2–5 นาที: uv (ตัวจัดการ Python), Tesseract OCR,
+     ภาษาไทยสำหรับอ่านใบเสร็จ (โฟลเดอร์ `tessdata\`) และ Python 3.13 แยกเฉพาะแอปนี้ (โฟลเดอร์ `.venv\`)
+     ถ้า Windows ถามสิทธิ์ตอนติดตั้ง Tesseract ให้กด **Yes**
    - เสร็จแล้วเบราว์เซอร์จะเปิด `http://localhost:8080` ให้อัตโนมัติ
+3. แอปรันในหน้าต่างย่อ "Income-Expense server" — ปิดแอปด้วย **`stop.bat`** หรือปิดหน้าต่างนั้น
 
-แอปตั้งค่า `restart: unless-stopped` ไว้ — ถ้า Docker Desktop เปิดตอนเข้า Windows แอปก็จะเปิดตามเองด้วย
+รัน `start.bat` ซ้ำได้เสมอ: ถ้าแอปเปิดอยู่แล้วจะรีสตาร์ทให้เพื่อใช้ค่าใหม่ใน `.env`
+อยากให้แอปเปิดเองตอนเข้า Windows: กด `Win+R` พิมพ์ `shell:startup` แล้ววาง shortcut ของ `start.bat` ไว้ในโฟลเดอร์นั้น
 
-ถ้าชอบใช้คำสั่งเอง (PowerShell/CMD ในโฟลเดอร์นี้):
+### ใช้กับ Docker แทน (ทางเลือก)
 
-```powershell
-docker compose up -d --build   # เปิด
-docker compose down            # ปิด (ข้อมูลยังอยู่)
-docker compose logs -f         # ดู log
-```
+ถ้ามี [Docker Desktop](https://www.docker.com/products/docker-desktop/) ใช้ `docker-start.bat` / `docker-stop.bat` / `docker-logs.bat` แทน
+หรือใช้คำสั่งเอง: `docker compose up -d --build` (เปิด), `docker compose down` (ปิด), `docker compose logs -f` (ดู log)
+โหมด Docker เก็บข้อมูลแยกไว้ใน Docker volume `income-expense-data` ไม่ใช่โฟลเดอร์ `data\` —
+ย้ายข้อมูลระหว่างสองแบบด้วยการสำรองเป็น .zip แล้วกู้คืนในอีกแบบ
 
 ## สแกนใบเสร็จ
 
@@ -85,7 +93,7 @@ docker compose logs -f         # ดู log
 
 | ค่า | ความหมาย |
 |---|---|
-| `APP_IMAGE=` | ว่าง = build เอง; ใส่ `ghcr.io/<ชื่อ GitHub>/income-expense-app:latest` = ดาวน์โหลด image ที่ CI สร้างไว้ |
+| `APP_IMAGE=` | (เฉพาะโหมด Docker) ว่าง = build เอง; ใส่ `ghcr.io/<ชื่อ GitHub>/income-expense-app:latest` = ดาวน์โหลด image ที่ CI สร้างไว้ |
 | `APP_PORT=8080` | พอร์ตที่ใช้เปิดในเบราว์เซอร์ ถ้า 8080 ถูกใช้อยู่ให้เปลี่ยนเป็น 8090 ฯลฯ |
 | `BIND_ADDRESS=127.0.0.1` | ใช้ได้เฉพาะเครื่องนี้ เปลี่ยนเป็น `0.0.0.0` ถ้าอยากเปิดจากมือถือ |
 | `APP_USER` / `APP_PASSWORD` | ใส่รหัสผ่านเพื่อล็อกแอป เบราว์เซอร์จะถามชื่อผู้ใช้/รหัสผ่าน |
@@ -94,16 +102,20 @@ docker compose logs -f         # ดู log
 ### เปิดจากมือถือ (Wi-Fi เดียวกัน)
 
 1. ใน `.env` ตั้ง `BIND_ADDRESS=0.0.0.0` และ **ตั้ง `APP_PASSWORD`** ด้วย
-2. รัน `start.bat` ใหม่
-3. ดู IP ของคอมด้วยคำสั่ง `ipconfig` (เช่น `192.168.1.25`) แล้วเปิดในมือถือ `http://192.168.1.25:8080`
-4. ถ้าเข้าไม่ได้ ให้อนุญาต Docker Desktop ใน Windows Firewall (Private network)
+2. รัน `start.bat` ใหม่ — หน้าต่างจะแสดงที่อยู่สำหรับเปิดจากมือถือ เช่น `http://192.168.1.25:8080`
+3. เปิดที่อยู่นั้นในมือถือ แล้วใส่ชื่อผู้ใช้/รหัสผ่าน
+4. ถ้าเข้าไม่ได้ ให้อนุญาต Python ใน Windows Firewall (Private network) และตั้ง Wi-Fi ของคอมเป็น Private
+
+**เปิดจากมือถือนอกบ้าน (ฟรี):** ติดตั้ง [Tailscale](https://tailscale.com) ทั้งในคอมและมือถือ (ล็อกอินบัญชีเดียวกัน)
+แล้วเปิด `http://<IP Tailscale ของคอม 100.x.x.x>:8080` ในมือถือ (คอมต้องเปิดและรันแอปอยู่)
+อย่าเปิดพอร์ตบนเราเตอร์ให้ทั้งอินเทอร์เน็ตเข้าได้ — รหัสผ่านส่งแบบไม่เข้ารหัส (HTTP)
 
 ## ข้อมูลเก็บที่ไหน / สำรองข้อมูล
 
-ข้อมูลอยู่ใน Docker volume ชื่อ **`income-expense-data`** (ไฟล์ `finance.db` และโฟลเดอร์ `receipts/` ข้างใน)
-ปิดแอป อัปเดตแอป หรือรีสตาร์ทเครื่อง ข้อมูลไม่หาย
+ข้อมูลอยู่ในโฟลเดอร์ **`data\`** ข้างไฟล์ `start.bat` (ไฟล์ `finance.db` และโฟลเดอร์ `receipts\`)
+ปิดแอป อัปเดตแอป หรือรีสตาร์ทเครื่อง ข้อมูลไม่หาย (โหมด Docker เก็บใน volume `income-expense-data` แทน)
 
-> ⚠️ อย่าใช้ `docker compose down -v` หรือลบ volume `income-expense-data` ใน Docker Desktop — ข้อมูลจะหายทั้งหมด
+> ⚠️ อย่าลบโฟลเดอร์ `data\` (หรือใช้ `docker compose down -v` ในโหมด Docker) — ข้อมูลจะหายทั้งหมด
 
 วิธีสำรอง เลือกได้ 3 แบบ:
 
@@ -112,7 +124,7 @@ docker compose logs -f         # ดู log
 - **อัตโนมัติ:** ตั้ง Windows Task Scheduler ให้รัน `backup.bat /quiet` ทุกวัน
 
 **กู้คืน:** ในแอป → *นำเข้า / สำรองข้อมูล* → *กู้คืนจากไฟล์สำรอง* แล้วเลือกไฟล์ .zip (หรือ .db จากเวอร์ชันแรก)
-(ระบบจะเก็บสำเนาข้อมูลเดิมไว้ใน volume เป็นไฟล์ `before-restore-*.db` ก่อนแทนที่)
+(ระบบจะเก็บสำเนาข้อมูลเดิมไว้ใน `data\` เป็นไฟล์ `before-restore-*.db` ก่อนแทนที่)
 
 **ย้ายเครื่อง:** สำรองเป็น .zip จากเครื่องเก่า → ติดตั้งแอปที่เครื่องใหม่ → กู้คืนจากไฟล์นั้น
 
@@ -134,8 +146,9 @@ docker compose logs -f         # ดู log
 
 ## อัปเดตแอป
 
-แทนที่ไฟล์ในโฟลเดอร์ (ยกเว้น `.env` ถ้าแก้ไว้) แล้วรัน `start.bat` — มัน build ใหม่ให้ ข้อมูลยังอยู่
-(อัปเดตจากเวอร์ชัน 1.0: build ครั้งแรกจะนานขึ้นเล็กน้อยเพราะต้องติดตั้งโปรแกรม OCR ภาษาไทย)
+แทนที่ไฟล์ในโฟลเดอร์ (หรือ `git pull`) โดยไม่ต้องแตะ `.env` และ `data\` แล้วรัน `start.bat` —
+ถ้า `requirements.txt` เปลี่ยน มันจะติดตั้งไลบรารีใหม่ให้เอง ข้อมูลยังอยู่
+(โหมด Docker: รัน `docker-start.bat` — build หรือดาวน์โหลด image ใหม่ให้)
 
 ## สำหรับนักพัฒนา
 
@@ -156,7 +169,8 @@ node --test tests/js/common.test.mjs                # เทส JavaScript ฝ�
 1. เพิ่มไฟล์ใหม่ใน `app/migrations/` เลขถัดไป เช่น `0003_add_accounts.sql`
 2. ห้ามแก้ไฟล์ที่ปล่อยไปแล้ว และไม่ต้องใส่ `BEGIN`/`COMMIT` — ตัวรันครอบให้ทีละไฟล์ (สำเร็จทั้งไฟล์หรือไม่เปลี่ยนอะไรเลย)
 3. เพิ่มเทสใน `tests/test_migrations.py` แล้วรัน `pytest`
-4. แอปจะ migrate เองตอนเริ่ม ดูสถานะได้ด้วย `docker compose exec app python -m app.migrate status`
+4. แอปจะ migrate เองตอนเริ่ม ดูสถานะได้ด้วย `set DATA_DIR=data&& .venv\Scripts\python -m app.migrate status`
+   (โหมด Docker: `docker compose exec app python -m app.migrate status`)
 
 ฐานข้อมูลจากเวอร์ชัน 1.0/1.1 (ก่อนมีระบบ migration) จะถูกตรวจและบันทึกเป็นเวอร์ชันที่ตรงกันให้อัตโนมัติ
 ไฟล์สำรองจากแอปเวอร์ชันใหม่กว่าจะกู้คืนไม่ได้ (กันข้อมูลเสีย) — อัปเดตแอปก่อน
@@ -175,11 +189,16 @@ push โค้ดขึ้น GitHub แล้ว workflow `.github/workflows/ci
 | push เข้า `main` | `latest`, `sha-xxxxxxx` |
 | push tag `v1.2.0` | `1.2.0`, `1.2`, `sha-xxxxxxx` |
 
-ใช้ image สำเร็จรูปบน Windows: ตั้ง `APP_IMAGE=ghcr.io/<ชื่อ GitHub>/income-expense-app:latest` ใน `.env` แล้วรัน `start.bat`
+ใช้ image สำเร็จรูปบน Windows (โหมด Docker): ตั้ง `APP_IMAGE=ghcr.io/<ชื่อ GitHub>/income-expense-app:latest` ใน `.env` แล้วรัน `docker-start.bat`
 (จะ `docker compose pull` แทนการ build) — package บน GHCR เป็น private โดยค่าเริ่มต้น:
 ตั้งเป็น public ในหน้า package บน GitHub หรือรัน `docker login ghcr.io` ครั้งเดียวด้วย Personal Access Token ที่มีสิทธิ์ `read:packages`
 
 ## ถอนการติดตั้ง
+
+รัน `stop.bat` แล้วลบทั้งโฟลเดอร์ (โฟลเดอร์ `data\` คือข้อมูลของคุณ — สำรองก่อน!)
+ถ้าไม่ใช้แล้ว ถอน Tesseract OCR และ uv ได้จาก *Settings → Apps*
+
+โหมด Docker:
 
 ```powershell
 docker compose down
@@ -191,12 +210,14 @@ docker volume rm income-expense-data   # ลบข้อมูลถาวร �
 
 | อาการ | วิธีแก้ |
 |---|---|
-| `Docker Desktop is not running` | เปิด Docker Desktop รอ Engine running แล้วรันใหม่ |
-| `port is already allocated` | เปลี่ยน `APP_PORT` ใน `.env` แล้วรัน `start.bat` |
+| `winget is missing` | ติดตั้ง "App Installer" จาก Microsoft Store แล้วรัน `start.bat` ใหม่ |
+| `The app did not start` / port ถูกใช้อยู่ | เปลี่ยน `APP_PORT` ใน `.env` แล้วรัน `start.bat` |
 | เปิดหน้าเว็บไม่ขึ้น | รัน `logs.bat` ดูข้อความผิดพลาด |
+| มือถือเข้าไม่ได้ | `BIND_ADDRESS=0.0.0.0` ใน `.env`, อนุญาต Python ใน Windows Firewall, Wi-Fi ของคอมเป็น Private |
+| `Docker Desktop is not running` (docker-start.bat) | เปิด Docker Desktop รอ Engine running แล้วรันใหม่ |
 | ลืมรหัสผ่าน | ดูหรือแก้ `APP_PASSWORD` ใน `.env` แล้วรัน `start.bat` |
 | backup.bat บอกว่าไม่สำเร็จ | ต้องเปิดแอปอยู่ (รัน `start.bat` ก่อน) |
-| หน้าสแกนบอกว่าไม่พบโปรแกรมอ่านตัวอักษร | image เก่า — รัน `start.bat` ใหม่ให้ build image ล่าสุด |
+| หน้าสแกนบอกว่าไม่พบโปรแกรมอ่านตัวอักษร | รัน `setup.bat` ใหม่ (โหมด Docker: `docker-start.bat` ให้ build image ล่าสุด) |
 | อ่านยอดผิดบ่อย | ถ่ายให้ชัดและตรงขึ้น หรือกดเลือกจาก “ยอดอื่นที่พบ” แล้วแก้ก่อนบันทึก |
 
 ## ความปลอดภัย
