@@ -153,3 +153,47 @@ def test_password_protects_everything_but_health(client, monkeypatch):
 def test_web_pages_are_served(client):
     for path in ("/", "/receipts.html", "/common.js", "/vendor/chart.umd.min.js"):
         assert client.get(path).status_code == 200, path
+
+
+# ---------------------------------------------------------------- budgets
+FOOD = ("อาหารและเครื่องดื่ม", "expense")
+
+
+def _put_cat(client, cid, **extra):
+    cat = next(c for c in client.get("/api/categories").json() if c["id"] == cid)
+    return client.put(f"/api/categories/{cid}", json={"name": cat["name"], "color": cat["color"], **extra})
+
+
+def test_category_budget_set_and_clear(client, categories):
+    food = categories[FOOD]
+    r = _put_cat(client, food, budget="6000")
+    assert r.status_code == 200 and r.json()["budget"] == 6000.0
+    assert "budget_satang" not in r.json()
+    assert next(c for c in client.get("/api/categories").json() if c["id"] == food)["budget"] == 6000.0
+
+    assert _put_cat(client, food, budget=None).json()["budget"] is None
+    _put_cat(client, food, budget="1500.505")
+    assert next(c for c in client.get("/api/categories").json() if c["id"] == food)["budget"] == 1500.51
+    assert _put_cat(client, food, budget="0").json()["budget"] is None
+
+
+def test_update_without_budget_keeps_it(client, categories):
+    food = categories[FOOD]
+    _put_cat(client, food, budget="6000")
+    r = client.put(f"/api/categories/{food}", json={"name": "อาหาร", "color": "#112233"})
+    assert r.status_code == 200 and r.json()["budget"] == 6000.0 and r.json()["name"] == "อาหาร"
+
+
+def test_budget_rejected_on_income_category(client, categories):
+    r = _put_cat(client, categories[("เงินเดือน", "income")], budget="100")
+    assert r.status_code == 400 and "รายรับ" in r.json()["detail"]
+
+
+def test_budget_must_be_a_positive_amount(client, categories):
+    assert _put_cat(client, categories[FOOD], budget="-5").status_code == 422
+    assert _put_cat(client, categories[FOOD], budget="abc").status_code == 422
+
+
+def test_new_category_has_no_budget(client):
+    r = client.post("/api/categories", json={"name": "สัตว์เลี้ยง", "type": "expense"})
+    assert r.status_code == 201 and r.json()["budget"] is None

@@ -37,6 +37,8 @@ async function loadCategories() {
   state.categories = await api("/api/categories");
   renderChips();
   renderCategoryFilter();
+  if (state.summary) renderBudgetCard();
+  updateBudgetHint();
   if ($("#categories-dialog").open) renderCategoryDialog();
 }
 
@@ -53,6 +55,7 @@ async function loadMonth() {
 
   const content = $("#main");
   if (state.summary) content.classList.add("loading");
+  monthExpenseCache.clear(); // runs after every save/delete, so other months' totals are re-fetched
   try {
     const [summary, txs] = await Promise.all([
       api(`/api/summary?month=${m}`),
@@ -63,6 +66,8 @@ async function loadMonth() {
     state.transactions = txs;
     $("#load-error").hidden = true;
     renderTotals();
+    renderBudgetCard();
+    updateBudgetHint();
     renderRecent();
     renderTxList();
     renderNoteSuggestions();
@@ -148,6 +153,28 @@ function renderTotals() {
   meter.setAttribute("aria-valuenow", String(Math.min(pct, 100)));
   meter.setAttribute("aria-valuetext", label);
   $("#spend-label").textContent = label;
+}
+
+/* ===================== overview: budgets ===================== */
+function renderBudgetCard() {
+  const cats = state.categories.filter((c) => c.type === "expense" && c.budget);
+  $("#budget-title").textContent = state.month === thisMonth() ? "งบประมาณเดือนนี้" : `งบประมาณ${monthName(state.month)}`;
+  $("#budget-empty").hidden = cats.length > 0;
+  $("#budget-edit").hidden = cats.length === 0;
+  $("#budget-list").innerHTML = cats.map((c) => {
+    const s = budgetStatus(c.budget, budgetSpent(state.summary.by_category.expense, c.id));
+    const left = s.remaining < 0 ? `เกิน ${baht(-s.remaining)}` : `เหลือ ${baht(s.remaining)}`;
+    return `<li class="budget-row" style="--c:${esc(c.color)}">
+      <span class="budget-name"><i></i>${esc(c.name)}</span>
+      <span class="budget-left num ${s.level}">${left}</span>
+      <div class="meter ${s.level === "ok" ? "" : s.level}" role="meter" aria-label="งบ${esc(c.name)}"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.min(s.pct, 100)}"
+           aria-valuetext="ใช้ไป ${baht(s.spent)} จาก ${baht(s.budget)} — ${left}">
+        <span class="meter-fill" style="width:${Math.min(s.pct, 100)}%"></span>
+      </div>
+      <span class="budget-of num">${baht(s.spent)} / ${baht(s.budget)}</span>
+    </li>`;
+  }).join("");
 }
 
 /* ===================== transactions ===================== */
@@ -316,13 +343,60 @@ function updateFormMode() {
   form.dataset.type = type;
   $("#submit-btn").textContent = state.editingId ? "บันทึกการแก้ไข" : `บันทึก${TYPE_TH[type]}`;
   $("#save-again").hidden = Boolean(state.editingId);
+  updateBudgetHint();
+}
+
+/* budget line under the category chips: "งบอาหาร พ.ย.: เหลือ ฿1,250.00 → หลังบันทึก ฿1,205.00" */
+const monthExpenseCache = new Map(); // "YYYY-MM" -> Promise<by_category.expense>, for months not on screen
+let budgetHintSeq = 0;
+
+function monthExpenseTotals(month) {
+  if (month === state.month && state.summary) return Promise.resolve(state.summary.by_category.expense);
+  if (!monthExpenseCache.has(month)) {
+    const req = api(`/api/summary?month=${month}`).then((s) => s.by_category.expense);
+    req.catch(() => monthExpenseCache.delete(month));
+    monthExpenseCache.set(month, req);
+  }
+  return monthExpenseCache.get(month);
+}
+
+async function updateBudgetHint() {
+  const el = $("#budget-hint");
+  const seq = ++budgetHintSeq;
+  const cat = state.categories.find((c) => c.id === state.lastCategory.expense);
+  const date = form.elements.date.value;
+  if (currentType() !== "expense" || !cat?.budget || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { el.hidden = true; return; }
+  const month = date.slice(0, 7);
+  let byCat;
+  try {
+    byCat = await monthExpenseTotals(month);
+  } catch {
+    if (seq === budgetHintSeq) el.hidden = true;
+    return;
+  }
+  if (seq !== budgetHintSeq) return; // a newer update started meanwhile
+  // when editing, the entry's original amount is already in its own month/category total
+  const orig = state.editingId && state.transactions.find((t) => t.id === state.editingId);
+  const minus = orig && orig.type === "expense" && orig.category_id === cat.id && orig.date.slice(0, 7) === month ? orig.amount : 0;
+  const now = budgetStatus(cat.budget, budgetSpent(byCat, cat.id, minus));
+  let html = `งบ${esc(cat.name)} ${esc(monthShort.format(parseISO(month + "-01")))}: `
+    + (now.remaining < 0 ? `<span class="over">เกินงบ ${baht(-now.remaining)}</span>` : `เหลือ ${baht(now.remaining)}`);
+  const { amount } = readAmount(form.elements.amount.value);
+  if (amount) {
+    const after = Math.round((now.remaining - amount) * 100) / 100;
+    html += ` → หลังบันทึก <span class="${after < 0 ? "over" : ""}">${baht(after)}</span>`;
+  }
+  el.innerHTML = html;
+  el.hidden = false;
 }
 
 function setDate(daysAgo) {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
   form.elements.date.value = isoDate(d);
+  updateBudgetHint();
 }
+form.elements.date.addEventListener("input", () => updateBudgetHint());
 
 function showFormError(msg) {
   const el = $("#form-error");
@@ -394,6 +468,7 @@ form.elements.amount.addEventListener("input", () => {
   form.elements.amount.classList.toggle("invalid", raw.trim() !== "" && Number.isNaN(v));
   if (isFormula) hint.textContent = Number.isNaN(v) ? "สูตรไม่ถูกต้อง" : `รวม = ${fmt(v)} บาท`;
   else hint.textContent = AMOUNT_HINT;
+  updateBudgetHint();
 });
 
 $("#category-chips").addEventListener("click", (e) => {
@@ -405,6 +480,7 @@ $("#category-chips").addEventListener("click", (e) => {
     c.setAttribute("aria-checked", on);
     c.tabIndex = on ? 0 : -1;
   });
+  updateBudgetHint();
 });
 $("#category-chips").addEventListener("keydown", (e) => {
   if (!["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"].includes(e.key)) return;
@@ -708,6 +784,8 @@ function renderCategoryDialog() {
       <li class="cat-row" data-id="${c.id}">
         <input type="color" value="${esc(c.color)}" aria-label="สีของ ${esc(c.name)}">
         <input type="text" value="${esc(c.name)}" maxlength="50" aria-label="ชื่อหมวดหมู่">
+        ${type === "expense" ? `<span class="budget-input-wrap"><span aria-hidden="true">฿</span><input class="budget-input num" inputmode="decimal"
+          value="${c.budget ? fmt(c.budget) : ""}" placeholder="งบ/เดือน" aria-label="งบประมาณต่อเดือนของ ${esc(c.name)}"></span>` : ""}
         <span class="count">${c.tx_count} รายการ</span>
         <button type="button" class="icon-btn" data-action="delete" aria-label="ลบหมวด ${esc(c.name)}">${icon("trash")}</button>
       </li>`).join("");
@@ -719,10 +797,25 @@ async function saveCategoryRow(row) {
   const cat = state.categories.find((c) => c.id === id);
   const name = row.querySelector('input[type="text"]').value.trim();
   const color = row.querySelector('input[type="color"]').value;
-  if (!cat || (name === cat.name && color.toLowerCase() === cat.color.toLowerCase())) return;
+  const budgetInput = row.querySelector(".budget-input");
+  if (!cat) return;
   if (!name) { row.querySelector('input[type="text"]').value = cat.name; return; }
+  const json = { name, color };
+  if (budgetInput) {
+    const { amount, valid } = readAmount(budgetInput.value);
+    if (!valid) {
+      toast("งบประมาณต้องเป็นจำนวนเงินมากกว่า 0 หรือเว้นว่างไว้", true);
+      budgetInput.value = cat.budget ? fmt(cat.budget) : "";
+      return;
+    }
+    if (amount !== (cat.budget ?? null)) json.budget = amount === null ? null : amount.toFixed(2);
+  }
+  if (name === cat.name && color.toLowerCase() === cat.color.toLowerCase() && !("budget" in json)) {
+    if (budgetInput) budgetInput.value = cat.budget ? fmt(cat.budget) : ""; // tidy "45+60" → 105.00
+    return;
+  }
   try {
-    await api(`/api/categories/${id}`, { method: "PUT", json: { name, color } });
+    await api(`/api/categories/${id}`, { method: "PUT", json });
     toast("บันทึกหมวดหมู่แล้ว");
     await loadCategories();
     await loadMonth();
@@ -737,7 +830,7 @@ catDialog.addEventListener("change", (e) => {
   if (row) saveCategoryRow(row);
 });
 catDialog.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && e.target.matches('.cat-row input[type="text"]')) { e.preventDefault(); e.target.blur(); }
+  if (e.key === "Enter" && e.target.matches('.cat-row input[type="text"], .cat-row .budget-input')) { e.preventDefault(); e.target.blur(); }
 });
 catDialog.addEventListener("click", async (e) => {
   const btn = e.target.closest('[data-action="delete"]');
