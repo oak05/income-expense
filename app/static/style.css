@@ -564,6 +564,20 @@ dialog::backdrop { background: var(--color-scrim); animation: fade-in var(--dur-
 #tx-form[data-type="income"] #submit-btn { background: var(--color-income); color: var(--color-surface); }
 #tx-form[data-type="income"] #submit-btn:hover { filter: brightness(1.08); }
 
+/* Compact add / edit transaction sheet */
+#entry-dialog { max-height: min(80dvh, 100%); }
+#entry-dialog .sheet-head { padding-top: var(--space-4); padding-bottom: 0; }
+#entry-dialog .sheet-head h2 { font-size: var(--text-md); }
+#entry-dialog .sheet-body { gap: var(--space-3); padding: var(--space-2) var(--space-4) var(--space-3); }
+#entry-dialog .amount-box { padding: var(--space-1) var(--space-3); }
+#entry-dialog .amount-box .currency { font-size: var(--text-lg); }
+#entry-dialog .amount-input { font-size: var(--text-2xl); }
+#entry-dialog .field { gap: var(--space-1); }
+#entry-dialog .chips { gap: var(--space-1) var(--space-2); }
+#entry-dialog .chip { min-height: 34px; padding: 0 var(--space-3) 0 var(--space-2); }
+#entry-dialog .segmented-type span { min-height: 38px; }
+#entry-dialog .sheet-foot { padding: var(--space-2) var(--space-4) calc(var(--space-2) + env(safe-area-inset-bottom)); }
+
 /* Categories dialog */
 .cat-columns { display: grid; gap: var(--space-5); }
 .cat-list { list-style: none; margin: 0; padding: 0; }
@@ -629,6 +643,7 @@ dialog::backdrop { background: var(--color-scrim); animation: fade-in var(--dur-
   }
   dialog.sheet[open] { animation: pop-in var(--dur-2) var(--ease); }
   #categories-dialog, #data-dialog { width: min(720px, calc(100vw - 2 * var(--space-8))); }
+  #entry-dialog { width: min(460px, calc(100vw - 2 * var(--space-8))); }
   .sheet-sm { width: min(440px, calc(100vw - 2 * var(--space-8))) !important; }
   .sheet-head { padding-top: var(--space-4); }
   .sheet-head::before { display: none; }
