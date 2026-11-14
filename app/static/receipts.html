@@ -2,95 +2,145 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F5F9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
   <title>สแกนใบเสร็จ — สมุดรายรับรายจ่าย</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='3' width='24' height='26' rx='3' fill='%231D2B45'/%3E%3Crect x='9' y='9' width='14' height='2' fill='%23C9A44C'/%3E%3Crect x='9' y='14' width='10' height='2' fill='%23C9A44C'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css?v=1.2.1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='8' fill='%232F5BEA'/%3E%3Cpath d='M10 20.5l4-4.5 3 3 5-6.5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css?v=2.0.0">
 </head>
 <body class="receipts-page">
   <a class="skip" href="#slips">ข้ามไปที่รายการใบเสร็จ</a>
 
-  <header class="cover">
-    <div class="cover-inner">
-      <a class="brand" href="/">สมุดรายรับรายจ่าย</a>
-      <nav class="page-nav" aria-label="หน้า">
-        <a class="text-btn nav-link" href="/">สมุดบัญชี</a>
-        <a class="text-btn nav-link" href="/receipts.html" aria-current="page">สแกนใบเสร็จ</a>
+  <div class="shell">
+    <!-- Sidebar (≥ 1024px) -->
+    <aside class="sidebar">
+      <a class="logo" href="/">
+        <svg class="logo-mark" aria-hidden="true"><use href="/icons.svg#i-logo"/></svg>
+        <span>สมุดรายรับรายจ่าย</span>
+      </a>
+      <a class="btn btn-primary btn-block" href="/#new">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg>จดรายการ
+      </a>
+      <nav class="side-nav" aria-label="เมนูหลัก">
+        <a class="nav-item" href="/">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-home"/></svg>ภาพรวม
+        </a>
+        <a class="nav-item" href="/#tx">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-list"/></svg>รายการทั้งหมด
+        </a>
+        <a class="nav-item" href="/#year">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-chart"/></svg>รายงานทั้งปี
+        </a>
+        <a class="nav-item" href="/receipts.html" aria-current="page">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-scan"/></svg>สแกนใบเสร็จ
+        </a>
       </nav>
-    </div>
-  </header>
-
-  <main class="rc-layout">
-    <section class="rc-main" aria-labelledby="rc-title">
-      <div class="rc-head">
-        <h1 id="rc-title">สแกนใบเสร็จ</h1>
-        <p>อัปโหลดรูปหรือ PDF ใบเสร็จ ระบบจะอ่านยอดรวม วันที่ และชื่อร้านให้ ตรวจแล้วกดบันทึกเป็นรายจ่ายได้ทีเดียวหลายใบ</p>
-      </div>
-
-      <div class="dropzone" id="dropzone">
-        <svg class="dz-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5M9 13h6M9 17h4"/></svg>
-        <p class="dz-title">ลากไฟล์ใบเสร็จมาวางที่นี่</p>
-        <p class="dz-sub">JPG, PNG, HEIC หรือ PDF เลือกได้หลายไฟล์พร้อมกัน หรือกด Ctrl+V วางรูปที่คัดลอกไว้</p>
-        <div class="dz-actions">
-          <label class="file-btn">
-            <input type="file" id="file-input" accept="image/*,.heic,.heif,application/pdf" multiple>
-            <span>เลือกไฟล์</span>
-          </label>
-          <label class="file-btn camera-btn">
-            <input type="file" id="camera-input" accept="image/*" capture="environment">
-            <span>ถ่ายรูปใบเสร็จ</span>
-          </label>
-        </div>
-      </div>
-
-      <p class="notice" id="ocr-warning" hidden>
-        ไม่พบโปรแกรมอ่านตัวอักษรในระบบ — อัปโหลดได้ แต่ต้องพิมพ์ยอดเอง (ถ้ารันผ่าน Docker ให้รัน start.bat ใหม่เพื่อ build image ล่าสุด)
-      </p>
-
-      <div class="rc-toolbar" id="rc-toolbar" hidden>
-        <h2 id="slips-title">รอตรวจ</h2>
-        <div>
-          <button class="text-btn small" type="button" id="include-all">เลือกทุกใบ</button>
-          <button class="text-btn small" type="button" id="exclude-all">ไม่เลือกเลย</button>
-        </div>
-      </div>
-
-      <ol class="slips" id="slips" aria-labelledby="slips-title"></ol>
-      <p class="empty rc-empty" id="rc-empty">ยังไม่มีใบเสร็จรอตรวจ — เริ่มจากเลือกไฟล์หรือถ่ายรูปด้านบน</p>
-    </section>
-
-    <aside class="tape-wrap" aria-labelledby="tape-title">
-      <div class="tape">
-        <h2 id="tape-title" class="tape-title">ยอดรวมใบเสร็จ</h2>
-        <ol class="tape-lines" id="tape-lines"></ol>
-        <div class="tape-total">
-          <span id="tape-count">0 ใบ</span>
-          <span class="tape-sum"><span id="tape-sum">0.00</span> <i aria-hidden="true">*</i></span>
-        </div>
-        <ul class="tape-cats" id="tape-cats" aria-label="แยกตามหมวดหมู่"></ul>
-      </div>
-      <button class="primary-btn save-all" type="button" id="save-all" disabled>บันทึกเป็นรายจ่าย</button>
-      <p class="tape-hint" id="tape-hint">ลงสมุดบัญชีตามวันที่บนใบเสร็จ แนบรูปไว้ดูภายหลังได้</p>
     </aside>
-  </main>
 
-  <dialog id="viewer" aria-label="รูปใบเสร็จ">
-    <form method="dialog" class="dialog-head">
+    <div class="main-col">
+      <header class="topbar">
+        <a class="logo logo-compact" href="/" aria-label="สมุดรายรับรายจ่าย — หน้าแรก">
+          <svg class="logo-mark" aria-hidden="true"><use href="/icons.svg#i-logo"/></svg>
+        </a>
+        <h1 class="page-title" id="rc-title">สแกนใบเสร็จ</h1>
+        <p class="topbar-title" aria-hidden="true">สแกนใบเสร็จ</p>
+      </header>
+
+      <main class="content rc-layout">
+        <section class="rc-main" aria-labelledby="rc-title">
+          <div class="rc-head">
+            <p class="rc-intro">อัปโหลดรูปหรือ PDF ใบเสร็จ ระบบจะอ่านยอดรวม วันที่ และชื่อร้านให้ ตรวจแล้วกดบันทึกเป็นรายจ่ายได้ทีเดียวหลายใบ</p>
+          </div>
+
+          <div class="dropzone" id="dropzone">
+            <span class="dz-icon"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-receipt"/></svg></span>
+            <p class="dz-title">ลากไฟล์ใบเสร็จมาวางที่นี่</p>
+            <p class="dz-sub">JPG, PNG, HEIC หรือ PDF เลือกได้หลายไฟล์พร้อมกัน หรือกด Ctrl+V วางรูปที่คัดลอกไว้</p>
+            <div class="dz-actions">
+              <label class="btn btn-primary file-btn">
+                <input type="file" id="file-input" accept="image/*,.heic,.heif,application/pdf" multiple>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-upload"/></svg>เลือกไฟล์
+              </label>
+              <label class="btn btn-secondary file-btn camera-btn">
+                <input type="file" id="camera-input" accept="image/*" capture="environment">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-camera"/></svg>ถ่ายรูปใบเสร็จ
+              </label>
+            </div>
+          </div>
+
+          <p class="banner banner-warn" id="ocr-warning" hidden>
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-alert"/></svg>
+            <span>ไม่พบโปรแกรมอ่านตัวอักษรในระบบ — อัปโหลดได้ แต่ต้องพิมพ์ยอดเอง (ถ้ารันผ่าน Docker ให้รัน start.bat ใหม่เพื่อ build image ล่าสุด)</span>
+          </p>
+
+          <div class="rc-toolbar" id="rc-toolbar" hidden>
+            <h2 id="slips-title">รอตรวจ</h2>
+            <div class="rc-toolbar-actions">
+              <button class="btn btn-sm btn-ghost" type="button" id="include-all">เลือกทุกใบ</button>
+              <button class="btn btn-sm btn-ghost" type="button" id="exclude-all">ไม่เลือกเลย</button>
+            </div>
+          </div>
+
+          <ol class="slips" id="slips" aria-labelledby="slips-title"></ol>
+          <div class="card empty-state rc-empty" id="rc-empty">
+            <svg class="empty-icon" aria-hidden="true"><use href="/icons.svg#i-scan"/></svg>
+            <p>ยังไม่มีใบเสร็จรอตรวจ — เริ่มจากเลือกไฟล์หรือถ่ายรูปด้านบน</p>
+          </div>
+        </section>
+
+        <aside class="tape-wrap" aria-labelledby="tape-title">
+          <div class="card tape">
+            <h2 id="tape-title" class="tape-title">ยอดรวมใบเสร็จ</h2>
+            <ol class="tape-lines" id="tape-lines"></ol>
+            <div class="tape-total">
+              <span id="tape-count">0 ใบ</span>
+              <span class="tape-sum num">฿<span id="tape-sum">0.00</span></span>
+            </div>
+            <ul class="tape-cats" id="tape-cats" aria-label="แยกตามหมวดหมู่"></ul>
+          </div>
+          <button class="btn btn-primary save-all" type="button" id="save-all" disabled>บันทึกเป็นรายจ่าย</button>
+          <p class="tape-hint" id="tape-hint">ลงสมุดบัญชีตามวันที่บนใบเสร็จ แนบรูปไว้ดูภายหลังได้</p>
+        </aside>
+      </main>
+    </div>
+  </div>
+
+  <!-- Bottom tab bar (< 1024px); the centre button takes a photo here -->
+  <nav class="tabbar" aria-label="เมนูหลัก">
+    <a class="tab-item" href="/">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-home"/></svg><span>ภาพรวม</span>
+    </a>
+    <a class="tab-item" href="/#tx">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-list"/></svg><span>รายการ</span>
+    </a>
+    <label class="fab file-btn" aria-label="ถ่ายรูปใบเสร็จ">
+      <input type="file" id="fab-camera-input" accept="image/*" capture="environment">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-camera"/></svg>
+    </label>
+    <a class="tab-item" href="/#year">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-chart"/></svg><span>รายงาน</span>
+    </a>
+    <a class="tab-item" href="/receipts.html" aria-current="page">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-scan"/></svg><span>สแกน</span>
+    </a>
+  </nav>
+
+  <dialog class="sheet viewer" id="viewer" aria-labelledby="viewer-title">
+    <header class="sheet-head">
       <h2 id="viewer-title">ใบเสร็จ</h2>
-      <div>
-        <a class="text-btn small" id="viewer-open" href="#" target="_blank" rel="noopener">เปิดไฟล์ต้นฉบับ</a>
-        <button class="icon-btn" value="close" aria-label="ปิด">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
-      </div>
-    </form>
-    <img id="viewer-img" alt="">
+      <a class="btn btn-sm btn-ghost" id="viewer-open" href="#" target="_blank" rel="noopener">เปิดไฟล์ต้นฉบับ</a>
+      <form method="dialog"><button class="icon-btn" value="close" aria-label="ปิด">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-close"/></svg>
+      </button></form>
+    </header>
+    <div class="sheet-body"><img id="viewer-img" alt=""></div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="/common.js?v=1.2.1"></script>
-  <script src="/receipts.js?v=1.2.1"></script>
+  <script src="/common.js?v=2.0.0"></script>
+  <script src="/receipts.js?v=2.0.0"></script>
 </body>
 </html>

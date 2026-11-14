@@ -20,6 +20,10 @@ const shiftMonth = (m, delta) => { const d = parseISO(m + "-01"); d.setMonth(d.g
 const monthName = (m) => monthLong.format(parseISO(m + "-01"));
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const TYPE_TH = { income: "รายรับ", expense: "รายจ่าย" };
+/** "฿1,234.00", negatives as "−฿1,234.00"; `sign` also prefixes positives with "+". */
+const baht = (n, { sign = false } = {}) => `${n < 0 ? "−" : sign && n > 0 ? "+" : ""}฿${fmt(Math.abs(n))}`;
+/** Inline SVG from the shared sprite (/icons.svg). */
+const icon = (name, cls = "") => `<svg class="icon${cls ? " " + cls : ""}" aria-hidden="true"><use href="/icons.svg#i-${name}"/></svg>`;
 
 async function api(path, opts = {}) {
   // the server only accepts changes that carry this header (another website can't add it)

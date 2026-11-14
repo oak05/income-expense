@@ -2,294 +2,413 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F5F9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
   <title>สมุดรายรับรายจ่าย</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='3' width='24' height='26' rx='3' fill='%231D2B45'/%3E%3Crect x='9' y='9' width='14' height='2' fill='%23C9A44C'/%3E%3Crect x='9' y='14' width='10' height='2' fill='%23C9A44C'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css?v=1.2.1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='8' fill='%232F5BEA'/%3E%3Cpath d='M10 20.5l4-4.5 3 3 5-6.5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css?v=2.0.0">
 </head>
 <body>
-  <a class="skip" href="#ledger-panel">ข้ามไปที่รายการ</a>
+  <a class="skip" href="#main">ข้ามไปที่เนื้อหา</a>
 
-  <header class="cover">
-    <div class="cover-inner">
-      <h1 class="brand">สมุดรายรับรายจ่าย</h1>
-
-      <nav class="month-nav" aria-label="เลือกเดือน">
-        <button class="icon-btn" id="prev-month" type="button" aria-label="เดือนก่อน">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+  <div class="shell">
+    <!-- Sidebar (≥ 1024px) -->
+    <aside class="sidebar">
+      <a class="logo" href="/">
+        <svg class="logo-mark" aria-hidden="true"><use href="/icons.svg#i-logo"/></svg>
+        <span>สมุดรายรับรายจ่าย</span>
+      </a>
+      <button class="btn btn-primary btn-block" type="button" data-open-entry>
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg>จดรายการ
+      </button>
+      <nav class="side-nav" aria-label="เมนูหลัก">
+        <button class="nav-item" type="button" data-view="overview" aria-current="page">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-home"/></svg>ภาพรวม
         </button>
-        <label class="month-label">
-          <span id="month-text">—</span>
-          <input type="month" id="month-input" aria-label="เลือกเดือน">
-        </label>
-        <button class="icon-btn" id="next-month" type="button" aria-label="เดือนถัดไป">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        <button class="nav-item" type="button" data-view="tx">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-list"/></svg>รายการทั้งหมด
         </button>
-        <button class="text-btn" id="this-month" type="button">เดือนนี้</button>
+        <button class="nav-item" type="button" data-view="year">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-chart"/></svg>รายงานทั้งปี
+        </button>
+        <a class="nav-item" href="/receipts.html">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-scan"/></svg>สแกนใบเสร็จ
+        </a>
       </nav>
-
-      <div class="cover-actions">
-        <a class="text-btn nav-link" href="/receipts.html">สแกนใบเสร็จ</a>
-        <button class="text-btn" id="open-categories" type="button">หมวดหมู่</button>
-        <button class="text-btn" id="open-data" type="button">นำเข้า / สำรองข้อมูล</button>
+      <div class="side-foot">
+        <p class="side-label">ตั้งค่า</p>
+        <button class="nav-item" type="button" data-open="categories">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-tag"/></svg>หมวดหมู่
+        </button>
+        <button class="nav-item" type="button" data-open="data">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-database"/></svg>นำเข้า / สำรองข้อมูล
+        </button>
+        <p class="side-hint">กด <kbd>N</kbd> เพื่อจดรายการใหม่</p>
       </div>
-    </div>
-  </header>
+    </aside>
 
-  <section class="totals" aria-label="สรุปยอดเดือนนี้">
-    <div class="total">
-      <span class="total-label">รายรับ</span>
-      <span class="total-value in" id="t-income">0.00</span>
-      <span class="total-note" id="t-income-note"></span>
-    </div>
-    <div class="total">
-      <span class="total-label">รายจ่าย</span>
-      <span class="total-value out" id="t-expense">0.00</span>
-      <span class="total-note" id="t-expense-note"></span>
-    </div>
-    <div class="total">
-      <span class="total-label">เหลือเดือนนี้</span>
-      <span class="total-value" id="t-balance">0.00</span>
-      <span class="total-note" id="t-balance-note"></span>
-    </div>
-    <div class="total">
-      <span class="total-label">ยอดคงเหลือสะสม</span>
-      <span class="total-value" id="t-cumulative">0.00</span>
-      <span class="total-note">ณ สิ้นเดือนที่เลือก</span>
-    </div>
-  </section>
+    <div class="main-col">
+      <!-- Top bar -->
+      <header class="topbar">
+        <a class="logo logo-compact" href="/" aria-label="สมุดรายรับรายจ่าย — หน้าแรก">
+          <svg class="logo-mark" aria-hidden="true"><use href="/icons.svg#i-logo"/></svg>
+        </a>
+        <h1 class="page-title" id="view-title" tabindex="-1">ภาพรวม</h1>
 
-  <main class="layout">
-    <!-- Entry form -->
-    <section class="entry" aria-labelledby="entry-title">
-      <form id="tx-form" autocomplete="off" novalidate>
-        <div class="entry-head">
-          <h2 id="entry-title">จดรายการ</h2>
-          <a class="text-btn small" id="edit-receipt-link" href="#" target="_blank" rel="noopener" hidden>ดูใบเสร็จ</a>
-          <button class="text-btn small" type="button" id="cancel-edit" hidden>ยกเลิกการแก้ไข</button>
+        <div class="month-switch" role="group" aria-label="เลือกเดือน">
+          <button class="icon-btn" id="prev-month" type="button" aria-label="เดือนก่อน">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-chevron-left"/></svg>
+          </button>
+          <label class="month-label">
+            <span id="month-text">—</span>
+            <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-chevron-down"/></svg>
+            <input type="month" id="month-input" aria-label="เลือกเดือน">
+          </label>
+          <button class="icon-btn" id="next-month" type="button" aria-label="เดือนถัดไป">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-chevron-right"/></svg>
+          </button>
+        </div>
+        <button class="btn btn-sm btn-secondary this-month" id="this-month" type="button" hidden>เดือนนี้</button>
+
+        <div class="menu-wrap">
+          <button class="icon-btn" id="more-btn" type="button" aria-label="เมนูเพิ่มเติม" aria-expanded="false" aria-controls="more-menu">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-more"/></svg>
+          </button>
+          <div class="menu" id="more-menu" hidden>
+            <button class="menu-item" type="button" data-open="categories">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-tag"/></svg>หมวดหมู่
+            </button>
+            <button class="menu-item" type="button" data-open="data">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-database"/></svg>นำเข้า / สำรองข้อมูล
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main" class="content">
+        <div class="banner banner-error" id="load-error" role="alert" hidden>
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-alert"/></svg>
+          <span id="load-error-text">โหลดข้อมูลไม่สำเร็จ</span>
+          <button class="btn btn-sm btn-secondary" type="button" id="retry">ลองใหม่</button>
         </div>
 
-        <div class="type-switch" role="radiogroup" aria-label="ประเภท">
-          <label class="type-opt out">
-            <input type="radio" name="type" value="expense" checked>
-            <span>รายจ่าย</span>
-          </label>
-          <label class="type-opt in">
-            <input type="radio" name="type" value="income">
-            <span>รายรับ</span>
-          </label>
+        <!-- ============ Overview ============ -->
+        <section class="view" id="view-overview" aria-label="ภาพรวม">
+          <div class="kpis">
+            <article class="hero" aria-labelledby="hero-label">
+              <p class="hero-label" id="hero-label">คงเหลือเดือนนี้</p>
+              <p class="hero-value num" id="t-balance">—</p>
+              <p class="hero-note" id="t-balance-note">&nbsp;</p>
+              <div class="meter" id="spend-meter" role="meter" aria-labelledby="spend-label" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <span class="meter-fill"></span>
+              </div>
+              <p class="meter-label" id="spend-label">ใช้ไป 0% ของรายรับ</p>
+              <dl class="hero-foot">
+                <dt>ยอดคงเหลือสะสม</dt>
+                <dd class="num" id="t-cumulative">—</dd>
+              </dl>
+            </article>
+
+            <article class="card stat" aria-labelledby="stat-in-label">
+              <span class="stat-icon in"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-in"/></svg></span>
+              <p class="stat-label" id="stat-in-label">รายรับ</p>
+              <p class="stat-value num in" id="t-income">—</p>
+              <p class="stat-note" id="t-income-note">&nbsp;</p>
+            </article>
+            <article class="card stat" aria-labelledby="stat-out-label">
+              <span class="stat-icon out"><svg class="icon" aria-hidden="true"><use href="/icons.svg#i-out"/></svg></span>
+              <p class="stat-label" id="stat-out-label">รายจ่าย</p>
+              <p class="stat-value num" id="t-expense">—</p>
+              <p class="stat-note" id="t-expense-note">&nbsp;</p>
+            </article>
+          </div>
+
+          <div class="grid-2">
+            <section class="card cat-card" aria-labelledby="cat-card-title">
+              <header class="card-head">
+                <h2 id="cat-card-title">แยกตามหมวดหมู่</h2>
+                <div class="segmented segmented-sm" role="radiogroup" aria-label="ประเภทของกราฟ">
+                  <label><input type="radio" name="cat-type" value="expense" checked><span>รายจ่าย</span></label>
+                  <label><input type="radio" name="cat-type" value="income"><span>รายรับ</span></label>
+                </div>
+              </header>
+              <div class="cat-split">
+                <div class="donut-wrap">
+                  <canvas id="chart-categories" role="img" aria-label="กราฟวงกลมแยกตามหมวดหมู่"></canvas>
+                  <div class="donut-center" aria-hidden="true">
+                    <span id="donut-label">รายจ่ายรวม</span>
+                    <strong class="num" id="donut-total">—</strong>
+                  </div>
+                </div>
+                <ol class="bars" id="cat-breakdown"></ol>
+              </div>
+            </section>
+
+            <section class="card" aria-labelledby="recent-title">
+              <header class="card-head">
+                <h2 id="recent-title">รายการล่าสุด</h2>
+                <button class="btn btn-sm btn-ghost" type="button" data-view="tx">ดูทั้งหมด
+                  <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-chevron-right"/></svg>
+                </button>
+              </header>
+              <ul class="tx-list" id="recent-list">
+                <li class="skeleton-row"></li><li class="skeleton-row"></li><li class="skeleton-row"></li>
+              </ul>
+            </section>
+          </div>
+
+          <section class="card" aria-labelledby="daily-caption">
+            <header class="card-head">
+              <h2 id="daily-caption">รายจ่ายรายวัน</h2>
+              <span class="card-meta" id="daily-meta"></span>
+            </header>
+            <div class="chart-wrap"><canvas id="chart-daily" role="img" aria-label="กราฟแท่งรายจ่ายรายวัน"></canvas></div>
+          </section>
+        </section>
+
+        <!-- ============ Transactions ============ -->
+        <section class="view" id="view-tx" aria-label="รายการทั้งหมด" hidden>
+          <div class="tx-toolbar">
+            <label class="search">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-search"/></svg>
+              <span class="sr-only">ค้นหา</span>
+              <input type="search" id="f-q" placeholder="ค้นหาหมายเหตุหรือหมวดหมู่" enterkeyhint="search">
+            </label>
+            <div class="filter-row">
+              <div class="segmented" role="radiogroup" aria-label="ประเภท">
+                <label><input type="radio" name="f-type" value="" checked><span>ทั้งหมด</span></label>
+                <label><input type="radio" name="f-type" value="expense"><span>รายจ่าย</span></label>
+                <label><input type="radio" name="f-type" value="income"><span>รายรับ</span></label>
+              </div>
+              <label class="select-wrap">
+                <span class="sr-only">หมวดหมู่</span>
+                <select id="f-category"><option value="">ทุกหมวดหมู่</option></select>
+              </label>
+              <a class="btn btn-sm btn-secondary" id="export-month" href="#" download>
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-download"/></svg>CSV
+              </a>
+            </div>
+          </div>
+
+          <div class="tx-summary" id="tx-summary"></div>
+
+          <div class="card tx-card">
+            <div id="tx-groups">
+              <ul class="tx-list"><li class="skeleton-row"></li><li class="skeleton-row"></li><li class="skeleton-row"></li><li class="skeleton-row"></li></ul>
+            </div>
+            <div class="empty-state" id="tx-empty" hidden>
+              <svg class="empty-icon" aria-hidden="true"><use href="/icons.svg#i-wallet"/></svg>
+              <p id="tx-empty-text"></p>
+              <button class="btn btn-primary" type="button" id="tx-empty-cta" data-open-entry>
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg>จดรายการ
+              </button>
+              <button class="btn btn-secondary" type="button" id="tx-clear-filters" hidden>ล้างตัวกรอง</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ Year ============ -->
+        <section class="view" id="view-year" aria-label="รายงานทั้งปี" hidden>
+          <div class="kpis kpis-3" id="year-totals"></div>
+          <section class="card" aria-labelledby="year-caption">
+            <header class="card-head">
+              <h2 id="year-caption">รายรับ–รายจ่ายรายเดือน</h2>
+              <span class="card-meta">แตะแท่งเพื่อเปิดเดือนนั้น</span>
+            </header>
+            <div class="chart-wrap tall"><canvas id="chart-year" role="img" aria-label="กราฟแท่งรายรับรายจ่ายรายเดือน"></canvas></div>
+          </section>
+          <section class="card" aria-labelledby="year-top-title">
+            <header class="card-head"><h2 id="year-top-title">หมวดรายจ่ายสูงสุดของปี</h2></header>
+            <ol class="bars" id="year-top"></ol>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Bottom tab bar (< 1024px) -->
+  <nav class="tabbar" aria-label="เมนูหลัก">
+    <button class="tab-item" type="button" data-view="overview" aria-current="page">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-home"/></svg><span>ภาพรวม</span>
+    </button>
+    <button class="tab-item" type="button" data-view="tx">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-list"/></svg><span>รายการ</span>
+    </button>
+    <button class="fab" type="button" data-open-entry aria-label="จดรายการ">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-plus"/></svg>
+    </button>
+    <button class="tab-item" type="button" data-view="year">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-chart"/></svg><span>รายงาน</span>
+    </button>
+    <a class="tab-item" href="/receipts.html">
+      <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-scan"/></svg><span>สแกน</span>
+    </a>
+  </nav>
+
+  <!-- ============ Entry sheet ============ -->
+  <dialog class="sheet" id="entry-dialog" aria-labelledby="entry-title">
+    <form id="tx-form" autocomplete="off" novalidate>
+      <header class="sheet-head">
+        <h2 id="entry-title">จดรายการ</h2>
+        <a class="btn btn-sm btn-ghost" id="edit-receipt-link" href="#" target="_blank" rel="noopener" hidden>
+          <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-clip"/></svg>ดูใบเสร็จ
+        </a>
+        <button class="icon-btn" type="button" id="entry-close" aria-label="ปิด">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-close"/></svg>
+        </button>
+      </header>
+
+      <div class="sheet-body">
+        <div class="segmented segmented-type" role="radiogroup" aria-label="ประเภท">
+          <label class="out"><input type="radio" name="type" value="expense" checked><span>รายจ่าย</span></label>
+          <label class="in"><input type="radio" name="type" value="income"><span>รายรับ</span></label>
         </div>
 
-        <label class="field">
-          <span class="field-label">จำนวนเงิน (บาท)</span>
-          <input class="amount-input" id="amount" name="amount" inputmode="decimal" placeholder="0.00" required
-                 aria-describedby="amount-hint">
+        <div class="amount-field">
+          <label class="field-label" for="amount">จำนวนเงิน</label>
+          <div class="amount-box">
+            <span class="currency" aria-hidden="true">฿</span>
+            <input class="amount-input num" id="amount" name="amount" inputmode="decimal" placeholder="0.00" required
+                   enterkeyhint="done" aria-describedby="amount-hint">
+          </div>
           <span class="field-hint" id="amount-hint">พิมพ์ 45+60 ได้ ระบบจะรวมให้</span>
-        </label>
+        </div>
 
         <fieldset class="field">
           <legend class="field-label">หมวดหมู่</legend>
           <div class="chips" id="category-chips" role="radiogroup" aria-label="หมวดหมู่"></div>
         </fieldset>
 
-        <div class="field-row">
-          <label class="field">
-            <span class="field-label">วันที่</span>
-            <input type="date" id="date" name="date" required>
-          </label>
-          <div class="quick-dates">
-            <button type="button" class="text-btn small" data-days-ago="0">วันนี้</button>
-            <button type="button" class="text-btn small" data-days-ago="1">เมื่อวาน</button>
+        <div class="field">
+          <label class="field-label" for="date">วันที่</label>
+          <div class="date-row">
+            <input class="input" type="date" id="date" name="date" required>
+            <button type="button" class="chip chip-plain" data-days-ago="0">วันนี้</button>
+            <button type="button" class="chip chip-plain" data-days-ago="1">เมื่อวาน</button>
           </div>
         </div>
 
-        <label class="field">
-          <span class="field-label">หมายเหตุ</span>
-          <input id="note" name="note" maxlength="500" placeholder="เช่น ข้าวกลางวัน, ค่า BTS" list="note-suggestions">
+        <div class="field">
+          <label class="field-label" for="note">หมายเหตุ <span class="optional">(ไม่บังคับ)</span></label>
+          <input class="input" id="note" name="note" maxlength="500" placeholder="เช่น ข้าวกลางวัน, ค่า BTS" list="note-suggestions">
           <datalist id="note-suggestions"></datalist>
-        </label>
+        </div>
 
         <p class="form-error" id="form-error" role="alert" hidden></p>
-
-        <div class="entry-actions">
-          <button class="primary-btn" type="submit" id="submit-btn">บันทึกรายจ่าย</button>
-          <button class="danger-btn" type="button" id="delete-btn" hidden>ลบรายการนี้</button>
-        </div>
-      </form>
-    </section>
-
-    <!-- Views -->
-    <section class="views">
-      <div class="tabs" role="tablist" aria-label="มุมมอง">
-        <button role="tab" id="tab-ledger" aria-controls="ledger-panel" aria-selected="true">สมุดบัญชี</button>
-        <button role="tab" id="tab-month" aria-controls="month-panel" aria-selected="false" tabindex="-1">สรุปเดือนนี้</button>
-        <button role="tab" id="tab-year" aria-controls="year-panel" aria-selected="false" tabindex="-1">ทั้งปี</button>
       </div>
 
-      <!-- Ledger -->
-      <div role="tabpanel" id="ledger-panel" aria-labelledby="tab-ledger" tabindex="-1">
-        <div class="filters">
-          <label class="sr-only" for="f-type">ประเภท</label>
-          <select id="f-type">
-            <option value="">ทุกประเภท</option>
+      <footer class="sheet-foot">
+        <button class="btn btn-danger" type="button" id="delete-btn" hidden>
+          <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-trash"/></svg>ลบ
+        </button>
+        <!-- primary first in the DOM so Enter in a field means "save" -->
+        <button class="btn btn-primary" type="submit" id="submit-btn" value="close">บันทึกรายจ่าย</button>
+        <button class="btn btn-secondary" type="submit" id="save-again" value="again">บันทึกแล้วจดต่อ</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ============ Categories ============ -->
+  <dialog class="sheet" id="categories-dialog" aria-labelledby="cat-title">
+    <header class="sheet-head">
+      <h2 id="cat-title">หมวดหมู่</h2>
+      <form method="dialog"><button class="icon-btn" value="close" aria-label="ปิด">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-close"/></svg>
+      </button></form>
+    </header>
+    <div class="sheet-body">
+      <div class="cat-columns">
+        <section>
+          <h3 class="section-title">รายจ่าย</h3>
+          <ul class="cat-list" id="cat-list-expense"></ul>
+        </section>
+        <section>
+          <h3 class="section-title">รายรับ</h3>
+          <ul class="cat-list" id="cat-list-income"></ul>
+        </section>
+      </div>
+      <form id="cat-add-form" class="cat-add" autocomplete="off">
+        <h3 class="section-title">เพิ่มหมวดหมู่</h3>
+        <div class="cat-add-row">
+          <select class="input" id="cat-new-type" aria-label="ประเภท">
             <option value="expense">รายจ่าย</option>
             <option value="income">รายรับ</option>
           </select>
-          <label class="sr-only" for="f-category">หมวดหมู่</label>
-          <select id="f-category"><option value="">ทุกหมวดหมู่</option></select>
-          <label class="sr-only" for="f-q">ค้นหา</label>
-          <input type="search" id="f-q" placeholder="ค้นหาหมายเหตุหรือหมวดหมู่">
-          <a class="text-btn small" id="export-month" href="#" download>ดาวน์โหลด CSV เดือนนี้</a>
+          <input class="input" id="cat-new-name" maxlength="50" placeholder="ชื่อหมวดหมู่" aria-label="ชื่อหมวดหมู่" required>
+          <input class="color-input" type="color" id="cat-new-color" value="#5B8DB8" aria-label="สี">
+          <button class="btn btn-primary" type="submit">เพิ่ม</button>
         </div>
+      </form>
+    </div>
+  </dialog>
 
-        <div class="passbook">
-          <table class="ledger" aria-describedby="ledger-caption">
-            <caption id="ledger-caption" class="sr-only">รายการเดือนที่เลือก คลิกแถวเพื่อแก้ไข</caption>
-            <colgroup>
-              <col class="c-date"><col class="c-desc"><col class="c-num"><col class="c-num"><col class="c-amt"><col class="c-num c-bal">
-            </colgroup>
-            <thead>
-              <tr>
-                <th scope="col">วันที่</th>
-                <th scope="col">รายการ</th>
-                <th scope="col" class="num out">จ่าย</th>
-                <th scope="col" class="num in">รับ</th>
-                <th scope="col" class="num amt">จำนวนเงิน</th>
-                <th scope="col" class="num bal">คงเหลือ</th>
-              </tr>
-            </thead>
-            <tbody id="ledger-body"></tbody>
-          </table>
-          <p class="empty" id="ledger-empty" hidden></p>
+  <!-- Move-and-delete -->
+  <dialog class="sheet sheet-sm" id="cat-delete-dialog" aria-labelledby="cat-del-title">
+    <form method="dialog" id="cat-delete-form">
+      <header class="sheet-head"><h2 id="cat-del-title">ลบหมวดหมู่</h2></header>
+      <div class="sheet-body">
+        <p id="cat-del-text"></p>
+        <div class="field">
+          <label class="field-label" for="cat-del-target">ย้ายรายการไปที่</label>
+          <select class="input" id="cat-del-target"></select>
         </div>
       </div>
-
-      <!-- Month summary -->
-      <div role="tabpanel" id="month-panel" aria-labelledby="tab-month" tabindex="-1" hidden>
-        <div class="summary-grid">
-          <figure class="chart-block">
-            <figcaption>รายจ่ายแยกตามหมวดหมู่</figcaption>
-            <div class="donut-wrap"><canvas id="chart-categories" aria-label="กราฟวงกลมรายจ่ายแยกตามหมวดหมู่" role="img"></canvas></div>
-          </figure>
-          <div class="breakdown">
-            <h3>รายจ่าย</h3>
-            <ol class="bars" id="expense-breakdown"></ol>
-            <h3>รายรับ</h3>
-            <ol class="bars" id="income-breakdown"></ol>
-          </div>
-        </div>
-        <figure class="chart-block wide">
-          <figcaption id="daily-caption">รายจ่ายรายวัน</figcaption>
-          <div class="bar-wrap"><canvas id="chart-daily" aria-label="กราฟแท่งรายจ่ายรายวัน" role="img"></canvas></div>
-        </figure>
-      </div>
-
-      <!-- Year -->
-      <div role="tabpanel" id="year-panel" aria-labelledby="tab-year" tabindex="-1" hidden>
-        <div class="year-totals" id="year-totals"></div>
-        <figure class="chart-block wide">
-          <figcaption id="year-caption">รายรับ–รายจ่ายรายเดือน</figcaption>
-          <div class="bar-wrap tall"><canvas id="chart-year" aria-label="กราฟแท่งรายรับรายจ่ายรายเดือน" role="img"></canvas></div>
-        </figure>
-        <div class="breakdown">
-          <h3>หมวดรายจ่ายสูงสุดของปี</h3>
-          <ol class="bars" id="year-top"></ol>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Categories dialog -->
-  <dialog id="categories-dialog" aria-labelledby="cat-title">
-    <form method="dialog" class="dialog-head">
-      <h2 id="cat-title">หมวดหมู่</h2>
-      <button class="icon-btn" value="close" aria-label="ปิด">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
+      <footer class="sheet-foot">
+        <button class="btn btn-secondary" value="cancel">ยกเลิก</button>
+        <button class="btn btn-danger-solid" value="confirm">ย้ายรายการและลบหมวด</button>
+      </footer>
     </form>
-    <div class="cat-columns">
-      <section>
-        <h3>รายจ่าย</h3>
-        <ul class="cat-list" id="cat-list-expense"></ul>
+  </dialog>
+
+  <!-- ============ Data ============ -->
+  <dialog class="sheet" id="data-dialog" aria-labelledby="data-title">
+    <header class="sheet-head">
+      <h2 id="data-title">นำเข้า / สำรองข้อมูล</h2>
+      <form method="dialog"><button class="icon-btn" value="close" aria-label="ปิด">
+        <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-close"/></svg>
+      </button></form>
+    </header>
+    <div class="sheet-body">
+      <section class="data-block">
+        <h3 class="section-title">ไฟล์ CSV (เปิดใน Excel ได้)</h3>
+        <p>ดาวน์โหลดรายการทั้งหมด หรือนำเข้าจากไฟล์ที่มีหัวตาราง วันที่, ประเภท, หมวดหมู่, จำนวนเงิน, หมายเหตุ
+          — รายการที่มีอยู่แล้วจะไม่ถูกเพิ่มซ้ำ</p>
+        <div class="data-actions">
+          <a class="btn btn-primary" href="/api/export.csv" download>
+            <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-download"/></svg>ดาวน์โหลด CSV ทั้งหมด
+          </a>
+          <label class="btn btn-secondary file-btn">
+            <input type="file" id="import-file" accept=".csv,text/csv">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-upload"/></svg>นำเข้า CSV
+          </label>
+        </div>
+        <p class="data-result" id="import-result" role="status"></p>
       </section>
-      <section>
-        <h3>รายรับ</h3>
-        <ul class="cat-list" id="cat-list-income"></ul>
+
+      <section class="data-block">
+        <h3 class="section-title">ไฟล์สำรองทั้งหมด (.zip)</h3>
+        <p>รวมทุกรายการ หมวดหมู่ และรูปใบเสร็จไว้ในไฟล์เดียว ใช้กู้คืนเมื่อย้ายเครื่องหรือข้อมูลหาย
+          การกู้คืนจะแทนที่ข้อมูลปัจจุบันทั้งหมด (ระบบเก็บสำเนาข้อมูลเดิมไว้ให้อัตโนมัติ) รองรับไฟล์ .db แบบเก่าด้วย</p>
+        <div class="data-actions">
+          <a class="btn btn-primary" href="/api/backup.zip" download>
+            <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-download"/></svg>ดาวน์โหลดไฟล์สำรอง
+          </a>
+          <label class="btn btn-danger file-btn">
+            <input type="file" id="restore-file" accept=".zip,.db,application/zip,application/octet-stream">
+            <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-upload"/></svg>กู้คืนจากไฟล์สำรอง
+          </label>
+        </div>
+        <p class="data-result" id="restore-result" role="status"></p>
       </section>
     </div>
-    <form id="cat-add-form" class="cat-add" autocomplete="off">
-      <h3>เพิ่มหมวดหมู่</h3>
-      <div class="cat-add-row">
-        <select id="cat-new-type" aria-label="ประเภท">
-          <option value="expense">รายจ่าย</option>
-          <option value="income">รายรับ</option>
-        </select>
-        <input id="cat-new-name" maxlength="50" placeholder="ชื่อหมวดหมู่" aria-label="ชื่อหมวดหมู่" required>
-        <input type="color" id="cat-new-color" value="#5B8DB8" aria-label="สี">
-        <button class="primary-btn" type="submit">เพิ่ม</button>
-      </div>
-    </form>
-  </dialog>
-
-  <!-- Move-and-delete dialog -->
-  <dialog id="cat-delete-dialog" aria-labelledby="cat-del-title">
-    <form method="dialog" id="cat-delete-form">
-      <h2 id="cat-del-title">ลบหมวดหมู่</h2>
-      <p id="cat-del-text"></p>
-      <label class="field">
-        <span class="field-label">ย้ายรายการไปที่</span>
-        <select id="cat-del-target"></select>
-      </label>
-      <div class="dialog-actions">
-        <button class="text-btn" value="cancel">ยกเลิก</button>
-        <button class="danger-btn" value="confirm">ย้ายรายการและลบหมวด</button>
-      </div>
-    </form>
-  </dialog>
-
-  <!-- Data dialog -->
-  <dialog id="data-dialog" aria-labelledby="data-title">
-    <form method="dialog" class="dialog-head">
-      <h2 id="data-title">นำเข้า / สำรองข้อมูล</h2>
-      <button class="icon-btn" value="close" aria-label="ปิด">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-      </button>
-    </form>
-
-    <section class="data-block">
-      <h3>ไฟล์ CSV (เปิดใน Excel ได้)</h3>
-      <p>ดาวน์โหลดรายการทั้งหมด หรือนำเข้าจากไฟล์ที่มีหัวตาราง วันที่, ประเภท, หมวดหมู่, จำนวนเงิน, หมายเหตุ
-        — รายการที่มีอยู่แล้วจะไม่ถูกเพิ่มซ้ำ</p>
-      <div class="data-actions">
-        <a class="primary-btn" href="/api/export.csv" download>ดาวน์โหลด CSV ทั้งหมด</a>
-        <label class="file-btn">
-          <input type="file" id="import-file" accept=".csv,text/csv">
-          <span>นำเข้า CSV</span>
-        </label>
-      </div>
-      <p class="data-result" id="import-result" role="status"></p>
-    </section>
-
-    <section class="data-block">
-      <h3>ไฟล์สำรองทั้งหมด (.zip)</h3>
-      <p>รวมทุกรายการ หมวดหมู่ และรูปใบเสร็จไว้ในไฟล์เดียว ใช้กู้คืนเมื่อย้ายเครื่องหรือข้อมูลหาย
-        การกู้คืนจะแทนที่ข้อมูลปัจจุบันทั้งหมด (ระบบเก็บสำเนาข้อมูลเดิมไว้ให้อัตโนมัติ) รองรับไฟล์ .db แบบเก่าด้วย</p>
-      <div class="data-actions">
-        <a class="primary-btn" href="/api/backup.zip" download>ดาวน์โหลดไฟล์สำรอง</a>
-        <label class="file-btn danger">
-          <input type="file" id="restore-file" accept=".zip,.db,application/zip,application/octet-stream">
-          <span>กู้คืนจากไฟล์สำรอง</span>
-        </label>
-      </div>
-      <p class="data-result" id="restore-result" role="status"></p>
-    </section>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script src="/common.js?v=1.2.1"></script>
-  <script src="/app.js?v=1.2.1"></script>
+  <script src="/common.js?v=2.0.0"></script>
+  <script src="/app.js?v=2.0.0"></script>
 </body>
 </html>

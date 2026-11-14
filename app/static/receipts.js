@@ -2,7 +2,7 @@
 /* Receipts page: upload -> OCR on the server -> review -> running total -> save as expenses */
 
 const MAX_BYTES = 25 * 1024 * 1024;
-const PDF_ICON = '<svg class="pdf-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/><text x="7.5" y="17" font-size="5" stroke="none" fill="currentColor" font-family="sans-serif">PDF</text></svg>';
+const PDF_ICON = `<span class="pdf-icon">${icon("file")}<b>PDF</b></span>`;
 const FLAG_TEXT = {
   no_amount: "อ่านยอดรวมไม่ได้ — ดูรูปแล้วพิมพ์ยอดเอง",
   check_amount: "ไม่พบคำว่า “รวม” หรือ “Total” ระบบใช้ยอดที่มากที่สุด — ตรวจกับรูปอีกครั้ง",
@@ -101,8 +101,8 @@ function slipHTML(slip) {
       <div class="slip-thumb">${PDF_ICON}</div>
       <div class="slip-body">
         <p class="slip-name">${esc(slip.name)}</p>
-        <p class="slip-flag">${esc(slip.error)}</p>
-        <button class="text-btn small" type="button" data-act="dismiss">นำออก</button>
+        <p class="slip-flag">${icon("alert", "icon-sm")}${esc(slip.error)}</p>
+        <div><button class="btn btn-sm btn-secondary" type="button" data-act="dismiss">นำออก</button></div>
       </div></li>`;
   }
   const d = slip.data;
@@ -116,23 +116,23 @@ function slipHTML(slip) {
     <div class="slip-body">
       <div class="slip-top">
         <input class="slip-merchant" data-field="merchant" value="${esc(d.merchant)}" placeholder="ชื่อร้าน" maxlength="200" aria-label="ชื่อร้าน">
-        <label class="slip-include"><input type="checkbox" data-field="included"${d.included ? " checked" : ""}> รวมยอด</label>
+        <label class="switch slip-include"><input type="checkbox" role="switch" data-field="included"${d.included ? " checked" : ""}><span class="switch-track" aria-hidden="true"></span>รวมยอด</label>
       </div>
       <div class="slip-fields">
         <label class="field"><span class="field-label">ยอดรวม (บาท)</span>
-          <input class="slip-amount${d.amount ? "" : " invalid"}" data-field="amount" inputmode="decimal" autocomplete="off"
+          <input class="input slip-amount num${d.amount ? "" : " invalid"}" data-field="amount" inputmode="decimal" autocomplete="off"
                  value="${d.amount != null ? d.amount.toFixed(2) : ""}" placeholder="ใส่ยอด"></label>
         <label class="field"><span class="field-label">วันที่</span>
-          <input type="date" data-field="date" value="${esc(d.date || "")}"></label>
+          <input class="input" type="date" data-field="date" value="${esc(d.date || "")}"></label>
         <label class="field"><span class="field-label">หมวดหมู่</span>
-          <select data-field="category_id">${categoryOptions(d.category_id)}</select></label>
+          <select class="input" data-field="category_id">${categoryOptions(d.category_id)}</select></label>
       </div>
       ${cands.length ? `<div class="slip-cands"><span>ยอดอื่นที่พบ</span>${cands.map((v) =>
-        `<button type="button" class="cand" data-act="pick" data-v="${v}">${fmt(v)}</button>`).join("")}</div>` : ""}
-      ${flags.map((f) => `<p class="slip-flag">${esc(f)}</p>`).join("")}
+        `<button type="button" class="chip cand num" data-act="pick" data-v="${v}">฿${fmt(v)}</button>`).join("")}</div>` : ""}
+      ${flags.map((f) => `<p class="slip-flag">${icon("alert", "icon-sm")}<span>${esc(f)}</span></p>`).join("")}
       <div class="slip-foot">
         <details><summary>ข้อความที่อ่านได้</summary><pre>${esc(d.ocr_text || "(ไม่มีข้อความ)")}</pre></details>
-        <button class="text-btn small danger-text" type="button" data-act="remove">ลบใบนี้</button>
+        <button class="btn btn-sm btn-ghost danger-text" type="button" data-act="remove">${icon("trash", "icon-sm")}ลบใบนี้</button>
       </div>
     </div></li>`;
 }
@@ -164,7 +164,7 @@ function renderTape() {
   $("#slips-title").textContent = uploading && !ready.length ? `กำลังอ่าน ${uploading} ใบ…` : `รอตรวจ ${ready.length} ใบ`;
   $("#tape-lines").innerHTML = [...inc].reverse().map((s) => `<li>
       <span class="t-name">${esc(s.data.merchant || "ไม่มีชื่อร้าน")}</span>
-      <span class="t-amt${s.data.amount > 0 ? "" : " t-missing"}">${s.data.amount > 0 ? fmt(s.data.amount) : "ยอดไม่ครบ"}<i aria-hidden="true">+</i></span>
+      <span class="t-amt num${s.data.amount > 0 ? "" : " t-missing"}">${s.data.amount > 0 ? "฿" + fmt(s.data.amount) : "ยอดไม่ครบ"}</span>
     </li>`).join("") || `<li class="t-blank">ใบที่เลือกจะมาบวกกันที่นี่</li>`;
   $("#tape-count").textContent = `รวม ${inc.length} ใบ`;
   $("#tape-sum").textContent = fmt(sum);
@@ -174,12 +174,12 @@ function renderTape() {
     if (!(s.data.amount > 0)) continue;
     const c = rs.categories.find((x) => x.id === s.data.category_id);
     const key = c ? c.id : 0;
-    const row = byCat.get(key) || { name: c ? c.name : "ยังไม่เลือกหมวด", color: c ? c.color : "#8590A3", total: 0 };
+    const row = byCat.get(key) || { name: c ? c.name : "ยังไม่เลือกหมวด", color: c ? c.color : cssVar("--color-text-subtle"), total: 0 };
     row.total += s.data.amount;
     byCat.set(key, row);
   }
   $("#tape-cats").innerHTML = [...byCat.values()].sort((a, b) => b.total - a.total)
-    .map((c) => `<li style="--c:${esc(c.color)}"><span><i></i>${esc(c.name)}</span><span>${fmt(c.total)}</span></li>`).join("");
+    .map((c) => `<li style="--c:${esc(c.color)}"><span><i></i>${esc(c.name)}</span><span class="num">฿${fmt(c.total)}</span></li>`).join("");
 
   const btn = $("#save-all");
   const noCat = inc.some((s) => !s.data.category_id);
@@ -342,18 +342,19 @@ function showSaved(res, month) {
   if (!banner) {
     banner = document.createElement("p");
     banner.id = "saved-banner";
-    banner.className = "saved-banner";
+    banner.className = "banner banner-ok saved-banner";
     banner.setAttribute("role", "status");
     $(".rc-head").after(banner);
   }
-  banner.innerHTML = `บันทึก ${res.saved} ใบ รวม <b>${fmt(res.total)}</b> บาท ลงสมุดบัญชีแล้ว
-    <a href="/#${month}">ดูใน${esc(monthName(month))}</a>`;
+  banner.innerHTML = `${icon("check")}<span>บันทึก ${res.saved} ใบ รวม <b>${fmt(res.total)}</b> บาท ลงสมุดบัญชีแล้ว
+    </span><a class="btn btn-sm btn-secondary" href="/#${month}/tx">ดูใน${esc(monthName(month))}</a>`;
   toast(`บันทึก ${res.saved} ใบแล้ว`);
 }
 
 /* ---------------- file inputs, drag & drop, paste ---------------- */
 $("#file-input").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
 $("#camera-input").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+$("#fab-camera-input").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
 
 const dz = $("#dropzone");
 let dragDepth = 0;
