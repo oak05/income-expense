@@ -675,6 +675,22 @@ $$("dialog.sheet").forEach((d) => {
   d.addEventListener("click", (e) => { if (downOnBackdrop && e.target === d) d.close(); downOnBackdrop = false; });
 });
 
+// iOS Safari leaves position:fixed elements on the layout viewport when the keyboard opens,
+// so a bottom sheet ends up behind the keyboard, below the visible area. Expose how much of the
+// layout viewport is hidden under the keyboard (and the visible height) so the CSS can lift the
+// sheet back into view. Stays 0 on desktop and on Android, where the keyboard resizes the page.
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const root = document.documentElement.style;
+  const syncViewport = () => {
+    root.setProperty("--kb-inset", `${Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))}px`);
+    root.setProperty("--vv-height", `${Math.round(vv.height)}px`);
+  };
+  vv.addEventListener("resize", syncViewport);
+  vv.addEventListener("scroll", syncViewport);
+  syncViewport();
+}
+
 // "N" opens a new entry from anywhere (KeyN also matches the Thai layout)
 document.addEventListener("keydown", (e) => {
   if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
