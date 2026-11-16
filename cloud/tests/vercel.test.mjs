@@ -231,6 +231,129 @@ test("requests over the size limit are refused", async () => {
   assert.equal(res.status, 413);
 });
 
+/* ---------- receipts & files ---------- */
+
+const PDF = readFileSync(new URL("../../tests/fixtures/ereceipt-shopee.pdf", import.meta.url));
+const upload = (cookie, bytes = JPEG, name = "ส้มตำ.jpg") => rpc(cookie, "receipts.upload", { name, data: bytes.toString("base64") });
+
+test("a receipt goes up as base64, is read, and its file comes back through /api/file", async () => {
+  const { cookie } = await session();
+  const up = await upload(cookie);
+  assert.equal(up.status, 200);
+  const draft = await up.json();
+  assert.equal(draft.status, "pending");
+  assert.ok(draft.amount > 0);
+  assert.equal(draft.original_name, "ส้มตำ.jpg");
+  assert.equal(draft.text_source, "drive-ocr");
+  assert.ok(draft.category_id);
+
+  const file = await fetch(`${base}/api/file?id=${draft.id}`, { headers: { cookie } });
+  assert.equal(file.status, 200);
+  assert.equal(file.headers.get("content-type"), "image/jpeg");
+  assert.equal(file.headers.get("x-content-type-options"), "nosniff");
+  assert.match(file.headers.get("cache-control"), /private/);
+  assert.ok(Buffer.from(await file.arrayBuffer()).equals(JPEG));
+
+  assert.equal((await fetch(`${base}/api/file?id=${draft.id}`)).status, 401);
+  assert.equal((await fetch(`${base}/api/file?id=abc`, { headers: { cookie } })).status, 400);
+  assert.equal((await fetch(`${base}/api/file?id=99999`, { headers: { cookie } })).status, 404);
+});
+
+test("B cannot fetch A's receipt file", async () => {
+  const a = await session(dev.users.a);
+  const b = await session(dev.users.b);
+  const draft = await (await upload(a.cookie)).json();
+  assert.equal((await fetch(`${base}/api/file?id=${draft.id}`, { headers: { cookie: b.cookie } })).status, 404);
+});
+
+test("file type is decided by content, not by the name; bad or oversized files are refused", async () => {
+  const { cookie } = await session();
+  const pdf = await (await upload(cookie, PDF, "photo.jpg")).json();
+  assert.equal(pdf.is_pdf, true);
+  assert.equal(pdf.text_source, "drive-pdf");
+  let res = await upload(cookie, Buffer.from("hello world"), "x.jpg");
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).detail, /JPG/);
+  assert.equal((await rpc(cookie, "receipts.upload", { name: "x", data: "" })).status, 400);
+  assert.equal((await rpc(cookie, "receipts.upload", { name: "x", data: "###" })).status, 400);
+  res = await upload(cookie, Buffer.concat([JPEG.subarray(0, 4), Buffer.alloc(2.6 * 1024 * 1024)]));
+  assert.equal(res.status, 413);
+});
+
+test("OCR down: the receipt is still saved with an error and no amount", async () => {
+  const { cookie } = await session();
+  const saved = process.env.APPS_SCRIPT_URL;
+  try {
+    const dead = http.createServer();
+    await new Promise((r) => dead.listen(0, "127.0.0.1", r));
+    const port = dead.address().port;
+    await new Promise((r) => dead.close(r));
+    process.env.APPS_SCRIPT_URL = `http://127.0.0.1:${port}/exec`;
+    const res = await upload(cookie);
+    assert.equal(res.status, 200);
+    const draft = await res.json();
+    assert.equal(draft.amount, null);
+    assert.ok(draft.flags.includes("no_amount") && draft.flags.includes("no_date"));
+    assert.match(draft.error, /ใส่ยอดเอง/);
+    assert.match(draft.date, /^\d{4}-\d{2}-\d{2}$/);
+  } finally {
+    process.env.APPS_SCRIPT_URL = saved;
+  }
+});
+
+test("a wrong OCR secret also keeps the receipt", async () => {
+  const { cookie } = await session();
+  const saved = process.env.APPS_SCRIPT_SECRET;
+  try {
+    process.env.APPS_SCRIPT_SECRET = "not-the-secret";
+    const draft = await (await upload(cookie)).json();
+    assert.equal(draft.amount, null);
+    assert.match(draft.error, /ใส่ยอดเอง/);
+  } finally {
+    process.env.APPS_SCRIPT_SECRET = saved;
+  }
+});
+
+test("storage failure leaves no receipt row", async () => {
+  const { cookie } = await session();
+  const before = (await (await rpc(cookie, "receipts.list", {})).json()).length;
+  dev.supabase.failNextUpload();
+  const res = await upload(cookie);
+  assert.equal(res.status, 502);
+  assert.match((await res.json()).detail, /เก็บไฟล์ใบเสร็จไม่สำเร็จ/);
+  assert.equal((await (await rpc(cookie, "receipts.list", {})).json()).length, before);
+});
+
+test("a refused draft removes the file it just stored", async () => {
+  const { cookie } = await session();
+  const objects = dev.supabase.objectCount();
+  await dev.db.exec("alter table receipts add constraint no_receipts_now check (false) not valid");
+  try {
+    assert.equal((await upload(cookie)).status, 500);
+  } finally {
+    await dev.db.exec("alter table receipts drop constraint no_receipts_now");
+  }
+  assert.equal(dev.supabase.objectCount(), objects);
+});
+
+test("deleting the transaction removes the stored file", async () => {
+  const { cookie } = await session();
+  const draft = await (await upload(cookie)).json();
+  const objects = dev.supabase.objectCount();
+  const cats = await (await rpc(cookie, "categories.list")).json();
+  const food = cats.find((c) => c.type === "expense").id;
+  assert.equal((await rpc(cookie, "receipts.commit", { items: [{ id: draft.id, amount: "65", date: "2026-11-09", category_id: food }] })).status, 200);
+  const tx = (await (await rpc(cookie, "transactions.list", {})).json()).find((t) => t.receipt_id === draft.id);
+  const del = await (await rpc(cookie, "transactions.delete", { id: tx.id })).json();
+  assert.deepEqual(del, { ok: true, receipts_removed: 1 });
+  assert.equal(dev.supabase.objectCount(), objects - 1);
+  assert.equal((await fetch(`${base}/api/file?id=${draft.id}`, { headers: { cookie } })).status, 404);
+
+  const pending = await (await upload(cookie)).json();
+  assert.deepEqual(await (await rpc(cookie, "receipts.delete", { id: pending.id })).json(), { ok: true });
+  assert.equal(dev.supabase.objectCount(), objects - 1);
+});
+
 /* ---------- static pages ---------- */
 
 test("pages are served with the security headers from vercel.json", async () => {

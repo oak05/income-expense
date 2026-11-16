@@ -1,13 +1,7 @@
-// Receipt parser (cloud/apps-script/Parser.gs) — the same 8 cases as tests/test_receipt_parser.py.
+// Receipt parser (cloud/vercel/lib/parser.js) — the same 8 cases as tests/test_receipt_parser.py.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
-
-const src = readFileSync(new URL("../apps-script/Parser.gs", import.meta.url), "utf8");
-const ctx = vm.createContext({});
-vm.runInContext(src + "\n;globalThis.__x = { parseReceiptText, HINT_CATEGORY_NAMES };", ctx);
-const { parseReceiptText } = ctx.__x;
+import { parseReceiptText, HINT_CATEGORY_NAMES } from "../vercel/lib/parser.js";
 const TODAY = "2026-11-10";
 
 const CASES = [
@@ -92,4 +86,8 @@ test("no text at all gives no amount and no date", () => {
 
 test("dates in the future are ignored", () => {
   assert.equal(parseReceiptText("รวม 50.00\n01/12/2027", TODAY).date, null);
+});
+
+test("every category hint names at least one default expense category", () => {
+  for (const names of Object.values(HINT_CATEGORY_NAMES)) assert.ok(Array.isArray(names) && names.length > 0);
 });

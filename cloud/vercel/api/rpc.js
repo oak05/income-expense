@@ -2,6 +2,7 @@
 import { handler, HttpError, json, readJson, requireSameOrigin, VERSION } from "../lib/server.js";
 import { rpc, storageRemove } from "../lib/supabase.js";
 import { hasSessionCookie, withUser } from "../lib/session.js";
+import { uploadReceipt } from "../lib/receipts.js";
 
 // What the web pages may ask for; each becomes public.api_<action with "." -> "_"> in the database.
 const ALLOWED = new Set([
@@ -23,6 +24,7 @@ export const POST = handler(async (request) => {
 
   return withUser(request, async (user) => {
     if (action === "info") return json({ version: VERSION, email: user.email });
+    if (action === "receipts.upload") return json(await uploadReceipt(user, params));
     const data = await rpc("api_" + action.replace(".", "_"), params, user.token);
     if (data && Array.isArray(data.removed_files)) { // transactions.delete / receipts.delete: the files go too
       const files = data.removed_files;
