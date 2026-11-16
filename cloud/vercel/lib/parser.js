@@ -280,10 +280,13 @@ function findDate_(text, today) {
     add(m.index, +m[3], +m[2], +m[1], true);
   });
 
-  const flat = text.toLowerCase().replace(/[.\s]/g, '');
-  const thAlt = Object.keys(TH_MONTHS).sort(function (a, b) { return b.length - a.length; }).join('|');
-  each(new RegExp('(?<!\\d)(\\d{1,2})(' + thAlt + ')(\\d{4}|\\d{2})(?!\\d)', 'g'), flat, function (m) {
-    add(m.index, +m[3], TH_MONTHS[m[2]], +m[1], false);
+  // Thai month names: "16 พ.ย. 69 16:57", "16 พฤศจิกายน 2569". Dots go, spaces stay (so the year can't run into a
+  // time after it); OCR's stray spaces inside a name ("พ. ย.") are allowed.
+  const noDots = text.toLowerCase().replace(/\./g, '');
+  const keys = Object.keys(TH_MONTHS).sort(function (a, b) { return b.length - a.length; });
+  const thAlt = keys.map(function (k) { return k.split('').join('\\s?'); }).join('|');
+  each(new RegExp('(?<!\\d)(\\d{1,2})\\s*(' + thAlt + ')\\s*(\\d{4}|\\d{2})(?!\\d)', 'g'), noDots, function (m) {
+    add(m.index, +m[3], TH_MONTHS[m[2].replace(/\s/g, '')], +m[1], false);
   });
   const low = text.toLowerCase();
   const enAlt = Object.keys(EN_MONTHS).join('|');

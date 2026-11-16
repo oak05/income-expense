@@ -88,6 +88,43 @@ test("dates in the future are ignored", () => {
   assert.equal(parseReceiptText("รวม 50.00\n01/12/2027", TODAY).date, null);
 });
 
+test("dates with Thai month names, short or full, พ.ศ. or ค.ศ., followed by a time or not", () => {
+  const cases = [
+    ["16 พ.ย. 69 16:57 น.", "2026-11-16"], // K PLUS slip: the time right after the year
+    ["16 พฤศจิกายน 2569", "2026-11-16"],
+    ["16 พฤศจิกายน 2569 เวลา 09:15", "2026-11-16"],
+    ["3 ก.พ. 2569", "2026-02-03"],
+    ["3 ก.พ. 69 08:00", "2026-02-03"],
+    ["16 พ. ย. 69", "2026-11-16"], // OCR put a space inside the abbreviation
+    ["16พ.ย.69", "2026-11-16"],
+    ["1 ม.ค. 26", "2026-01-01"], // ค.ศ. 2-digit
+    ["วันที่ 5 ตุลาคม 2026", "2026-10-05"],
+    ["31 ธ.ค. 68 23:59", "2025-12-31"],
+  ];
+  for (const [text, iso] of cases) assert.equal(parseReceiptText("รวม 50.00\n" + text, "2026-11-16").date, iso, text);
+});
+
+test("a Thai bank transfer slip gives its date and amount", () => {
+  const slip = `ชําระเงินสําเร็จ
+16 พ.ย. 69 16:57 น.
+นาย ทดสอบ ใจดี
+ธ.กสิกรไทย
+XXX-x-x1234-x
+ร้านป้าสมาน
+นาง ตัวอย่าง ทดลอง
+202611160000001
+จํานวน:
+42.00 บา
+ค่าธรรมเนียม:
+0.00 บาท
+เลขทีรายการ:
+016320160000AQRO0000
+K+`;
+  const r = parseReceiptText(slip, "2026-11-16");
+  assert.equal(r.date, "2026-11-16");
+  assert.equal(r.amount, 42);
+});
+
 test("every category hint names at least one default expense category", () => {
   for (const names of Object.values(HINT_CATEGORY_NAMES)) assert.ok(Array.isArray(names) && names.length > 0);
 });

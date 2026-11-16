@@ -4,12 +4,6 @@
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024; // Drive OCR limit, and it keeps the request under Vercel's 4.5 MB cap
 const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 const PDF_ICON = `<span class="pdf-icon">${icon("file")}<b>PDF</b></span>`;
-const FLAG_TEXT = {
-  no_amount: "อ่านยอดรวมไม่ได้ — ดูรูปแล้วพิมพ์ยอดเอง",
-  check_amount: "ไม่พบคำว่า “รวม” หรือ “Total” ระบบใช้ยอดที่มากที่สุด — ตรวจกับรูปอีกครั้ง",
-  no_date: "ไม่พบวันที่ในใบเสร็จ ใช้วันที่อัปโหลดแทน",
-};
-
 const rs = {
   categories: [],
   slips: [], // {key, status: uploading|ready|error, name, file, localUrl, isPdf, data, error}
@@ -146,7 +140,6 @@ function slipHTML(slip) {
       </div></li>`;
   }
   const d = slip.data;
-  const flags = [...d.flags.map((f) => FLAG_TEXT[f]).filter(Boolean), d.error].filter(Boolean);
   const cands = d.candidates.filter((v) => v !== d.amount).slice(0, 5);
   const label = d.merchant || d.original_name || "ใบเสร็จ";
   return `<li class="slip${d.included ? "" : " excluded"}" data-key="${slip.key}">
@@ -169,9 +162,7 @@ function slipHTML(slip) {
       </div>
       ${cands.length ? `<div class="slip-cands"><span>ยอดอื่นที่พบ</span>${cands.map((v) =>
         `<button type="button" class="chip cand num" data-act="pick" data-v="${v}">฿${fmt(v)}</button>`).join("")}</div>` : ""}
-      ${flags.map((f) => `<p class="slip-flag">${icon("alert", "icon-sm")}<span>${esc(f)}</span></p>`).join("")}
       <div class="slip-foot">
-        <details><summary>ข้อความที่อ่านได้</summary><pre>${esc(d.ocr_text || "(ไม่มีข้อความ)")}</pre></details>
         <button class="btn btn-sm btn-ghost danger-text" type="button" data-act="remove">${icon("trash", "icon-sm")}ลบใบนี้</button>
       </div>
     </div></li>`;

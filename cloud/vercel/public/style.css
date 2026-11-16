@@ -791,14 +791,7 @@ div.slip-thumb { cursor: default; }
 }
 .slip-flag .icon { margin-top: 3px; }
 .slip.failed .slip-flag { background: var(--color-expense-soft); color: var(--color-expense); }
-.slip-foot { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
-.slip-foot details { min-width: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
-.slip-foot summary { padding: var(--space-2) 0; cursor: pointer; }
-.slip-foot summary:hover { color: var(--color-text); }
-.slip-foot pre {
-  max-height: 220px; margin: var(--space-1) 0 0; padding: var(--space-3); overflow: auto; white-space: pre-wrap;
-  font: var(--text-xs)/1.6 var(--font-mono), var(--font-sans); background: var(--color-surface-2); border-radius: var(--radius-sm);
-}
+.slip-foot { display: flex; justify-content: flex-end; gap: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
 .danger-text { color: var(--color-expense) !important; }
 .danger-text:hover { background: var(--color-expense-soft) !important; }
 .slip.excluded .slip-fields, .slip.excluded .slip-cands, .slip.excluded .slip-thumb img, .slip.excluded .slip-merchant { opacity: .45; }
