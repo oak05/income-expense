@@ -96,6 +96,9 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
     return true;
   }
   const tooSoon = (res) => authErr(res, 429, "over_email_send_rate_limit", "For security purposes, you can only request this after 60 seconds.");
+  /** Supabase's built-in email (no custom SMTP) only reaches the project's team: api.mailOnlyTo, null = anyone. */
+  const unmailable = (to) => Array.isArray(api.mailOnlyTo) && !api.mailOnlyTo.includes(to);
+  const notAuthorized = (res, to) => authErr(res, 400, "email_address_not_authorized", `Email address "${to}" cannot be used as it is not authorized`);
 
   /* ---------- HTTP ---------- */
 
@@ -169,6 +172,13 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
         return authErr(res, 422, "weak_password", "Password should be at least 6 characters.");
       }
       const existing = await userByEmail(email);
+      if (api.autoconfirm) { // "Confirm email" off: the account is ready at once and the answer is a session
+        if (existing) return authErr(res, 422, "user_already_exists", "User already registered");
+        const r = await db.query("insert into auth.users (email, encrypted_password, email_confirmed_at) values ($1, $2, now()) returning id",
+          [email.toLowerCase(), hashPassword(body.password)]);
+        return send(res, 200, session(await userById(r.rows[0].id)));
+      }
+      if (existing && !existing.email_confirmed_at && unmailable(existing.email)) return notAuthorized(res, existing.email);
       if (existing && !existing.email_confirmed_at && !mail(existing.email, "email", existing.id)) return tooSoon(res); // re-sends
       if (existing) return send(res, 200, { id: randomBytes(16).toString("hex"), email }); // confirmed: same answer, no mail
       const r = await db.query("insert into auth.users (email, encrypted_password) values ($1, $2) returning id",
@@ -178,11 +188,13 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
     }
     if (req.method === "POST" && path === "/recover") {
       const user = await userByEmail(String(body.email || ""));
+      if (user && unmailable(user.email)) return notAuthorized(res, user.email);
       if (user && !mail(user.email, "recovery", user.id)) return tooSoon(res);
       return send(res, 200, {});
     }
     if (req.method === "POST" && path === "/resend") {
       const user = await userByEmail(String(body.email || ""));
+      if (user && !user.email_confirmed_at && body.type === "signup" && unmailable(user.email)) return notAuthorized(res, user.email);
       if (user && !user.email_confirmed_at && body.type === "signup" && !mail(user.email, "email", user.id)) return tooSoon(res);
       return send(res, 200, {});
     }
@@ -304,6 +316,10 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
     serviceKey,
     siteUrl,
     mailbox,
+    /** true = Supabase's "Confirm email" is off: sign-up returns a session and sends nothing. */
+    autoconfirm: false,
+    /** null = emails reach anyone (custom SMTP); an array = only these addresses (Supabase's built-in email). */
+    mailOnlyTo: null,
     /** The next upload answers 500, as if Storage were down. */
     failNextUpload() {
       failUpload = true;

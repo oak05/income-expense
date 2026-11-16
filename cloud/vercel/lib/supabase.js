@@ -63,6 +63,10 @@ export function authError(body, status) {
     case "flow_state_expired":
     case "flow_state_not_found":
       return new HttpError(410, "ลิงก์นี้ใช้แล้วหรือหมดอายุ — ขอลิงก์ใหม่", "link_expired");
+    case "user_already_exists": // only when "Confirm email" is off; with it on, Supabase answers as if new
+      return new HttpError(409, "อีเมลนี้มีบัญชีแล้ว — เข้าสู่ระบบ หรือใช้อีเมลอื่น", "user_exists");
+    case "email_address_not_authorized": // no email service set up: Supabase's own email reaches only the project's team
+      return new HttpError(503, "ระบบนี้ยังส่งอีเมลไม่ได้ — ติดต่อผู้ดูแลเพื่อตั้งรหัสผ่านใหม่", "email_unavailable");
     case "over_email_send_rate_limit":
     case "over_request_rate_limit":
       return new HttpError(429, "ส่งอีเมลบ่อยเกินไป รอสักครู่แล้วลองใหม่");
@@ -137,15 +141,21 @@ export async function updatePassword(accessToken, password, cfg = config()) {
  */
 async function emailCall(path, body, cfg) {
   try {
-    await authCall(path, { body }, cfg);
+    return await authCall(path, { body }, cfg);
   } catch (err) {
     if (!(err instanceof HttpError && err.status === 429)) throw err;
     console.warn("supabase email interval:", path);
+    return null;
   }
 }
 
+/**
+ * Creates the account. With "Confirm email" on, Supabase emails a link and this returns null; with it off, the
+ * account is ready at once and this returns its session.
+ */
 export async function signUp(email, password, cfg = config()) {
-  await emailCall("/signup", { email, password }, cfg);
+  const body = await emailCall("/signup", { email, password }, cfg);
+  return body?.access_token ? toSession(body) : null;
 }
 
 export async function recover(email, cfg = config()) {

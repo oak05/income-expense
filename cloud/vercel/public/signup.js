@@ -1,5 +1,6 @@
 "use strict";
-/* Sign-up page: create an account; Supabase emails a confirmation link to confirm.html. */
+/* Sign-up page: create an account. Either Supabase emails a confirmation link to confirm.html, or (with email
+   confirmation off in Supabase) the account is ready at once and the answer says where to go. */
 
 $("#signup-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -13,7 +14,11 @@ $("#signup-form").addEventListener("submit", async (e) => {
   btn.disabled = true;
   btn.textContent = "กำลังสมัคร…";
   try {
-    await apiPost("/api/signup", { email: $("#email").value, password: $("#password").value });
+    const res = await apiPost("/api/signup", { email: $("#email").value, password: $("#password").value });
+    if (res && res.next === "/") {
+      location.replace("/");
+      return;
+    }
     $("#done-email").textContent = $("#email").value.trim();
     $("#signup-form").hidden = true;
     $("#done").hidden = false;

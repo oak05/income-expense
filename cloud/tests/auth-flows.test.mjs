@@ -193,6 +193,50 @@ test("delete account: wrong email refused; right email removes rows and every fi
   assert.equal((await post("/api/login", { email, password })).status, 401);
 });
 
+/* Without an email service: Supabase's "Confirm email" off, and its built-in email reaches only the project's team. */
+async function withoutEmail(fn) {
+  dev.supabase.autoconfirm = true;
+  dev.supabase.mailOnlyTo = [];
+  try {
+    await fn();
+  } finally {
+    dev.supabase.autoconfirm = false;
+    dev.supabase.mailOnlyTo = null;
+  }
+}
+
+test("with email confirmation off, sign-up signs straight in to a new book", () => withoutEmail(async () => {
+  const email = freshEmail();
+  const before = dev.mailbox.length;
+  const res = await post("/api/signup", { email, password: "password-123" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true, next: "/" });
+  const cookie = cookiesOf(res);
+  assert.match(cookie, /sb_access=.+; sb_refresh=.+/);
+  assert.equal(dev.mailbox.length, before, "no email");
+  assert.equal((await (await rpc(cookie, "categories.list")).json()).length, 15);
+  assert.deepEqual(await (await fetch(base + "/api/session", { headers: { cookie } })).json(), { authenticated: true, email });
+  assert.equal((await post("/api/login", { email, password: "password-123" })).status, 200);
+}));
+
+test("with email confirmation off, signing up an existing email says to sign in", () => withoutEmail(async () => {
+  const res = await post("/api/signup", { email: dev.users.a.email, password: "password-123" });
+  assert.equal(res.status, 409);
+  const body = await res.json();
+  assert.equal(body.code, "user_exists");
+  assert.match(body.detail, /มีบัญชีแล้ว/);
+  assert.equal(res.headers.getSetCookie().length, 0);
+}));
+
+test("forgot password when Supabase can't email the address says to ask the admin", () => withoutEmail(async () => {
+  const res = await post("/api/recover", { email: dev.users.a.email });
+  assert.equal(res.status, 503);
+  const body = await res.json();
+  assert.equal(body.code, "email_unavailable");
+  assert.match(body.detail, /ติดต่อผู้ดูแล/);
+  assert.equal((await post("/api/recover", { email: "nobody@example.com" })).status, 200); // no account: nothing to send
+}));
+
 test("delete account needs a session", async () => {
   assert.equal((await post("/api/account", { action: "delete", email: "a@example.com" })).status, 401);
 });
