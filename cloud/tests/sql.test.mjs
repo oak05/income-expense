@@ -259,3 +259,62 @@ test("import is all-or-nothing on a database error", async () => {
   await assert.rejects(call("transactions.import", { rows }));
   assert.deepEqual([(await call("transactions.list", {})).length, (await call("categories.list")).length], before);
 });
+
+/* ---------- summaries ---------- */
+
+test("month summary: totals, previous month, cumulative balance, daily and per category", async () => {
+  const { call, add } = await start();
+  await add("income", 30000, "2026-10-01");
+  await add("expense", 1000, "2026-10-15");
+  await add("income", 28000, "2026-11-01");
+  await add("expense", 120.5, "2026-11-05");
+  await add("expense", 0.1, "2026-11-05");
+  await add("expense", 0.2, "2026-11-05");
+  await add("expense", 5, "2026-12-01"); // after the month: not in the cumulative balance
+
+  const m = await call("month.get", { month: "2026-11" });
+  assert.equal(m.month, "2026-11");
+  assert.deepEqual(m.totals, { income: 28000, expense: 120.8, balance: 27879.2, count: 4 });
+  assert.deepEqual(m.previous, { income: 30000, expense: 1000, balance: 29000, count: 2 });
+  assert.equal(m.cumulative_balance, 30000 - 1000 + 27879.2);
+  assert.equal(m.daily.length, 30);
+  assert.deepEqual(m.daily[4], { day: 5, income: 0, expense: 120.8 }); // 120.5 + 0.1 + 0.2 without float drift
+  assert.deepEqual(m.daily[0], { day: 1, income: 28000, expense: 0 });
+  assert.deepEqual(m.by_category.expense, [{ id: m.by_category.expense[0].id, name: "อาหารและเครื่องดื่ม", color: "#E07A3F", total: 120.8, count: 3 }]);
+  assert.equal(m.by_category.income[0].total, 28000);
+  assert.equal(m.transactions.length, 4);
+  assert.equal(m.transactions[0].date, "2026-11-05"); // newest first
+  assert.equal(m.transactions.at(-1).date, "2026-11-01");
+
+  const y = await call("yearly.get", { year: 2026 });
+  assert.equal(y.year, 2026);
+  assert.equal(y.months.length, 12);
+  assert.deepEqual(y.months[9], { month: "2026-10", income: 30000, expense: 1000 });
+  assert.deepEqual(y.totals, { income: 58000, expense: 1125.8, balance: 56874.2, count: 7 });
+  assert.deepEqual(y.top_expense_categories, [{ name: "อาหารและเครื่องดื่ม", color: "#E07A3F", total: 1125.8 }]);
+  assert.equal((await call("month.get", { month: "2027-02" })).daily.length, 28);
+  assert.deepEqual((await call("month.get", { month: "2027-02" })).by_category, { income: [], expense: [] });
+  await rejects(call("month.get", { month: "2026-13" }), 400, /YYYY-MM/);
+  await rejects(call("yearly.get", { year: 1800 }), 422, /ปี/);
+  await rejects(call("yearly.get", { year: "abc" }), 422, /ปี/);
+});
+
+test("top expense categories: sorted, at most 8", async () => {
+  const { call, cats } = await start();
+  const expense = Object.entries(cats).filter(([k]) => k.startsWith("expense:"));
+  for (const [i, [, id]] of expense.entries()) {
+    await call("transactions.create", { type: "expense", amount: String(10 + i), date: "2026-03-01", note: "", category_id: id });
+  }
+  const top = (await call("yearly.get", { year: 2026 })).top_expense_categories;
+  assert.equal(top.length, 8);
+  assert.deepEqual(top.map((c) => c.total), [18, 17, 16, 15, 14, 13, 12, 11]);
+});
+
+test("summaries never include another user's rows", async () => {
+  const { callB, add } = await start();
+  await add("income", 100, "2026-11-01");
+  const m = await callB("month.get", { month: "2026-11" });
+  assert.deepEqual(m.totals, { income: 0, expense: 0, balance: 0, count: 0 });
+  assert.equal(m.cumulative_balance, 0);
+  assert.equal((await callB("yearly.get", { year: 2026 })).totals.count, 0);
+});
