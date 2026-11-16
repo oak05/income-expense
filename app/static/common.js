@@ -20,6 +20,10 @@ const shiftMonth = (m, delta) => { const d = parseISO(m + "-01"); d.setMonth(d.g
 const monthName = (m) => monthLong.format(parseISO(m + "-01"));
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const TYPE_TH = { income: "รายรับ", expense: "รายจ่าย" };
+/** "฿1,234.00", negatives as "−฿1,234.00"; `sign` also prefixes positives with "+". */
+const baht = (n, { sign = false } = {}) => `${n < 0 ? "−" : sign && n > 0 ? "+" : ""}฿${fmt(Math.abs(n))}`;
+/** Inline SVG from the shared sprite (/icons.svg). */
+const icon = (name, cls = "") => `<svg class="icon${cls ? " " + cls : ""}" aria-hidden="true"><use href="/icons.svg#i-${name}"/></svg>`;
 
 async function api(path, opts = {}) {
   // the server only accepts changes that carry this header (another website can't add it)
@@ -71,3 +75,19 @@ function readAmount(text) {
   return v > 0 ? { amount: v, valid: true } : { amount: null, valid: false };
 }
 
+
+/**
+ * How a category stands against its monthly budget (baht). level: "ok", "warn" (80–100%) or "over" (> 100%),
+ * the same thresholds as the spend meter.
+ */
+function budgetStatus(budget, spent) {
+  const remaining = Math.round((budget - spent) * 100) / 100;
+  const pct = Math.round((spent / budget) * 100);
+  return { budget, spent, remaining, pct, level: pct > 100 ? "over" : pct >= 80 ? "warn" : "ok" };
+}
+
+/** A category's spending from a summary's by_category.expense list, minus `minus` (the entry being edited). */
+function budgetSpent(byCategoryExpense, categoryId, minus = 0) {
+  const total = (byCategoryExpense || []).find((c) => c.id === categoryId)?.total || 0;
+  return Math.max(0, Math.round((total - minus) * 100) / 100);
+}

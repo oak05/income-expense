@@ -7,8 +7,8 @@ import vm from "node:vm";
 
 const source = readFileSync(new URL("../../app/static/common.js", import.meta.url), "utf8");
 const context = vm.createContext({});
-vm.runInContext(`${source}\n;globalThis.__exports = { evalAmount, readAmount, fmt, shiftMonth, parseISO, isoDate };`, context);
-const { evalAmount, readAmount, fmt, shiftMonth, parseISO, isoDate } = context.__exports;
+vm.runInContext(`${source}\n;globalThis.__exports = { evalAmount, readAmount, fmt, shiftMonth, parseISO, isoDate, budgetStatus, budgetSpent };`, context);
+const { evalAmount, readAmount, fmt, shiftMonth, parseISO, isoDate, budgetStatus, budgetSpent } = context.__exports;
 
 test("evalAmount adds and subtracts, ignores commas, spaces and ฿", () => {
   assert.equal(evalAmount("45+60"), 105);
@@ -57,4 +57,28 @@ test("shiftMonth crosses year boundaries", () => {
 test("parseISO/isoDate round-trip in local time (no off-by-one day)", () => {
   assert.equal(isoDate(parseISO("2026-11-10")), "2026-11-10");
   assert.equal(isoDate(parseISO("2026-03-01")), "2026-03-01");
+});
+
+test("budgetStatus: remaining, percent and level (warn from 80%, over above 100%)", () => {
+  const ok = budgetStatus(6000, 4750);
+  assert.equal(ok.remaining, 1250);
+  assert.equal(ok.pct, 79);
+  assert.equal(ok.level, "ok");
+  assert.equal(budgetStatus(6000, 4800).level, "warn");
+  const full = budgetStatus(6000, 6000);
+  assert.equal(full.level, "warn");
+  assert.equal(full.remaining, 0);
+  const over = budgetStatus(2000, 2300);
+  assert.equal(over.level, "over");
+  assert.equal(over.remaining, -300);
+  assert.equal(budgetStatus(0.3, 0.1).remaining, 0.2); // no float noise like 0.19999…
+});
+
+test("budgetSpent: category total minus the edited entry, never below zero", () => {
+  const byCat = [{ id: 1, total: 500 }, { id: 2, total: 80 }];
+  assert.equal(budgetSpent(byCat, 1), 500);
+  assert.equal(budgetSpent(byCat, 1, 120), 380);
+  assert.equal(budgetSpent(byCat, 9), 0);
+  assert.equal(budgetSpent(byCat, 2, 100), 0);
+  assert.equal(budgetSpent(undefined, 1), 0);
 });
