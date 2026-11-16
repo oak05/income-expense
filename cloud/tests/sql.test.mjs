@@ -1,7 +1,7 @@
 // The Supabase database (cloud/supabase/migrations) running in PGlite, called the way PostgREST calls it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createDb, createUser, callApi } from "../dev/pg.mjs";
+import { createDb, createUser, callApi, callFn } from "../dev/pg.mjs";
 
 /* ---------- harness ---------- */
 
@@ -455,4 +455,67 @@ test("B cannot commit, update, delete or fetch the file of A's receipt", async (
   await rejects(callB("receipts.file", { id: d.id }), 404);
   assert.equal((await callB("receipts.list", {})).length, 0);
   assert.equal((await call("receipts.list", {}))[0].amount, 125);
+});
+
+/* ---------- sign-in throttle, account deletion, storage ---------- */
+
+const throttle = (db, kind, key, outcome) =>
+  callFn(db, { role: "service_role" }, "auth_throttle", { p_kind: kind, p_key: key, p_outcome: outcome });
+
+test("login throttle blocks after 8 failures and a success clears it", async () => {
+  const db = await createDb();
+  for (let i = 0; i < 7; i++) await throttle(db, "login", "k1", "fail");
+  assert.deepEqual(await throttle(db, "login", "k1", "check"), { blocked: false });
+  await throttle(db, "login", "k1", "fail");
+  assert.deepEqual(await throttle(db, "login", "k1", "check"), { blocked: true });
+  assert.deepEqual(await throttle(db, "login", "k2", "check"), { blocked: false }); // per key
+  await db.query("update private.auth_attempts set window_end = now() - interval '1 second'"); // 15 minutes later
+  assert.deepEqual(await throttle(db, "login", "k1", "check"), { blocked: false });
+  await throttle(db, "login", "k1", "fail");
+  assert.deepEqual(await throttle(db, "login", "k1", "check"), { blocked: false }, "the count starts again after the window");
+  await throttle(db, "login", "k1", "ok");
+  assert.equal((await db.query("select count(*)::int as n from private.auth_attempts where key = 'k1'")).rows[0].n, 0);
+});
+
+test("signup throttle allows 5 per hour per key", async () => {
+  const db = await createDb();
+  for (let i = 0; i < 5; i++) assert.deepEqual(await throttle(db, "signup", "ip1", "hit"), { blocked: false });
+  assert.deepEqual(await throttle(db, "signup", "ip1", "hit"), { blocked: true });
+  assert.deepEqual(await throttle(db, "recover", "ip1", "hit"), { blocked: false }, "each kind counts on its own");
+  await db.query("update private.auth_attempts set window_end = now() - interval '1 second' where kind = 'signup'");
+  assert.deepEqual(await throttle(db, "signup", "ip1", "hit"), { blocked: false });
+  await assert.rejects(throttle(db, "signup", "ip1", "fail"), (e) => e.status === 400);
+  await assert.rejects(throttle(db, "nope", "ip1", "hit"), (e) => e.status === 400);
+});
+
+test("authenticated users cannot call auth_throttle or read the attempts", async () => {
+  const db = await createDb();
+  const a = await createUser(db, { email: "a@example.com" });
+  await assert.rejects(callFn(db, { sub: a }, "auth_throttle", { p_kind: "login", p_key: "k", p_outcome: "ok" }), /permission denied/);
+  await assert.rejects(callFn(db, { role: "anon" }, "auth_throttle", { p_kind: "login", p_key: "k", p_outcome: "ok" }), /permission denied/);
+  await assert.rejects(asUser(db, a, "select * from private.auth_attempts"), /permission denied/);
+});
+
+test("delete account needs the matching email and removes every row", async () => {
+  const { db, a, b, call, callB, add } = await start();
+  await add("expense", 10, "2026-11-01");
+  await draft(call, a);
+  await draft(callB, b);
+  await rejects(call("delete_account", { email: "b@example.com" }), 400, /อีเมลไม่ตรง/);
+  await rejects(call("delete_account", {}), 400, /อีเมลไม่ตรง/);
+  assert.deepEqual(await call("delete_account", { email: " A@Example.com " }), { ok: true });
+  const left = await db.query("select (select count(*)::int from auth.users) u, (select count(*)::int from categories) c, (select count(*)::int from transactions) t, (select count(*)::int from receipts) r");
+  assert.deepEqual(left.rows[0], { u: 1, c: 15, t: 0, r: 1 });
+  assert.equal((await callB("categories.list")).length, 15);
+});
+
+test("storage policy: B cannot see or write A's objects", async () => {
+  const { db, a, b } = await start();
+  assert.equal((await db.query("select public from storage.buckets where id = 'receipts'")).rows[0].public, false);
+  await asUser(db, a, "insert into storage.objects (bucket_id, name, owner) values ('receipts', $1, $2)", [`${a}/1.jpg`, a]);
+  assert.equal((await asUser(db, a, "select count(*)::int as n from storage.objects"))[0].n, 1);
+  assert.equal((await asUser(db, b, "select count(*)::int as n from storage.objects"))[0].n, 0);
+  assert.equal((await asUser(db, b, "delete from storage.objects returning id")).length, 0);
+  await assert.rejects(asUser(db, b, "insert into storage.objects (bucket_id, name, owner) values ('receipts', $1, $2)", [`${a}/2.jpg`, b]));
+  await assert.rejects(asUser(db, a, "insert into storage.objects (bucket_id, name, owner) values ('other', $1, $2)", [`${a}/2.jpg`, a]));
 });
