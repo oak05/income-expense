@@ -318,3 +318,141 @@ test("summaries never include another user's rows", async () => {
   assert.equal(m.cumulative_balance, 0);
   assert.equal((await callB("yearly.get", { year: 2026 })).totals.count, 0);
 });
+
+/* ---------- receipts ---------- */
+
+let fileNo = 0;
+/** What Vercel sends after storing the file and reading it: api_receipts_create. */
+const draft = (call, userId, extra = {}) => call("receipts.create", {
+  merchant: "7-Eleven", amount: 125, date: "2026-11-09", hint_names: ["อาหารและเครื่องดื่ม"],
+  storage_path: `${userId}/${++fileNo}.jpg`, size: 1000, mime: "image/jpeg", original_name: "r.jpg",
+  text_source: "drive-ocr", confidence: "high", candidates: [{ amount: 125, label: "รวม" }], flags: [], error: "",
+  ocr_text: "7-ELEVEN\nรวม 125.00", ...extra,
+});
+
+test("a receipt draft is stored and comes back in the old shape", async () => {
+  const { call, a, cats } = await start();
+  const d = await draft(call, a);
+  assert.deepEqual({ ...d, id: 0, created_at: "" }, {
+    id: 0, status: "pending", merchant: "7-Eleven", amount: 125, date: "2026-11-09",
+    category_id: cats["expense:อาหารและเครื่องดื่ม"], included: true, transaction_id: null, is_pdf: false,
+    original_name: "r.jpg", text_source: "drive-ocr", confidence: "high", candidates: [{ amount: 125, label: "รวม" }],
+    flags: [], error: "", ocr_text: "7-ELEVEN\nรวม 125.00", created_at: "",
+  });
+  assert.deepEqual((await call("receipts.list", {})).map((r) => r.id), [d.id]);
+  assert.deepEqual(await call("receipts.file", { id: d.id }), { storage_path: `${a}/${fileNo}.jpg`, mime: "image/jpeg", original_name: "r.jpg" });
+  const pdf = await draft(call, a, { mime: "application/pdf", amount: null, ocr_text: "x".repeat(5000) });
+  assert.equal(pdf.is_pdf, true);
+  assert.equal(pdf.amount, null);
+  assert.equal(pdf.ocr_text.length, 4000);
+  await rejects(draft(call, a, { mime: "image/gif" }), 400, /JPG/);
+});
+
+test("category hint picks the matching expense category", async () => {
+  const { call, a, cats } = await start();
+  assert.equal((await draft(call, a, { hint_names: ["เดินทาง"] })).category_id, cats["expense:เดินทาง"]);
+  assert.equal((await draft(call, a, { hint_names: ["xyz", "ช้อปปิ้ง"] })).category_id, cats["expense:ช้อปปิ้ง"]);
+  assert.equal((await draft(call, a, { hint_names: ["อาหาร"] })).category_id, cats["expense:อาหารและเครื่องดื่ม"]); // substring
+  assert.equal((await draft(call, a, { hint_names: [] })).category_id, cats["expense:อื่นๆ"]);
+});
+
+test("quota: the upload that crosses 100 MB is refused", async () => {
+  const { call, callB, a, b } = await start();
+  await draft(call, a, { size: 60 * 1024 * 1024 });
+  await draft(call, a, { size: 40 * 1024 * 1024 }); // exactly 100 MB is fine
+  await rejects(draft(call, a, { size: 1 }), 413, /100 MB/);
+  await draft(callB, b, { size: 1 }); // the quota is per account
+});
+
+test("storage_path outside the user's folder is refused", async () => {
+  const { call, a, b } = await start();
+  await rejects(draft(call, a, { storage_path: `${b}/x.jpg` }), 400, /ไฟล์/);
+  await rejects(draft(call, a, { storage_path: `${a}x/x.jpg` }), 400, /ไฟล์/);
+  await rejects(draft(call, a, { storage_path: `${a}/../${b}/x.jpg` }), 400, /ไฟล์/);
+});
+
+test("draft edits are stored; saved receipts can't be edited", async () => {
+  const { call, a, cats } = await start();
+  const d = await draft(call, a);
+  await call("receipts.update", { id: d.id, amount: "130", included: false, merchant: "ร้าน A" });
+  const r = (await call("receipts.list", {}))[0];
+  assert.deepEqual([r.amount, r.included, r.merchant], [130, false, "ร้าน A"]);
+  assert.equal((await call("receipts.update", { id: d.id, amount: null })).amount, null);
+  assert.equal((await call("receipts.update", { id: d.id, date: "2026-11-01" })).date, "2026-11-01");
+  await rejects(call("receipts.update", { id: d.id, category_id: cats["income:เงินเดือน"] }), 400);
+  await rejects(call("receipts.update", { id: d.id, amount: "abc" }), 422);
+  await rejects(call("receipts.update", { id: 999999, amount: "1" }), 404);
+
+  await call("receipts.commit", { items: [{ id: d.id, amount: "130", date: "2026-11-09", category_id: cats["expense:เดินทาง"] }] });
+  await rejects(call("receipts.update", { id: d.id, amount: "1" }), 409, /บันทึกไปแล้ว/);
+});
+
+test("commit writes nothing unless every item is valid", async () => {
+  const { call, a, cats } = await start();
+  const r1 = await draft(call, a), r2 = await draft(call, a);
+  const food = cats["expense:อาหารและเครื่องดื่ม"];
+  const items = [
+    { id: r1.id, amount: "125", date: "2026-11-09", category_id: food, merchant: "7-Eleven" },
+    { id: r2.id, amount: "50", date: "2026-11-09", category_id: cats["income:เงินเดือน"] },
+  ];
+  await rejects(call("receipts.commit", { items }), 400);
+  assert.equal((await call("transactions.list", {})).length, 0);
+  assert.equal((await call("receipts.list", {})).length, 2);
+
+  await rejects(call("receipts.commit", { items: [items[0], items[0]] }), 409);
+  assert.equal((await call("transactions.list", {})).length, 0);
+  await rejects(call("receipts.commit", { items: [] }), 422);
+
+  items[1].category_id = food;
+  assert.deepEqual(await call("receipts.commit", { items }), { saved: 2, total: 175 });
+  const txs = await call("transactions.list", {});
+  assert.deepEqual(txs.map((t) => t.receipt_id).sort(), [r1.id, r2.id].sort());
+  assert.deepEqual(txs.map((t) => t.note).sort(), ["7-Eleven", "ใบเสร็จ"]);
+  assert.equal((await call("receipts.list", {})).length, 0);
+  const saved = await call("receipts.list", { status: "saved" });
+  assert.equal(saved.length, 2);
+  assert.ok(saved.every((r) => r.transaction_id && r.status === "saved"));
+  await rejects(call("receipts.commit", { items }), 409);
+});
+
+test("deleting a transaction removes its receipt row and returns the file path", async () => {
+  const { call, a, cats } = await start();
+  const d = await draft(call, a);
+  const path = (await call("receipts.file", { id: d.id })).storage_path;
+  await call("receipts.commit", { items: [{ id: d.id, amount: "125", date: "2026-11-09", category_id: cats["expense:เดินทาง"] }] });
+  const tx = (await call("transactions.list", {}))[0];
+  assert.deepEqual(await call("transactions.delete", { id: tx.id }), { ok: true, receipts_removed: 1, removed_files: [path] });
+  assert.equal((await call("receipts.list", { status: "saved" })).length, 0);
+  await rejects(call("receipts.file", { id: d.id }), 404, /ไม่พบไฟล์ใบเสร็จ/);
+});
+
+test("deleting a receipt returns its path; a saved one leaves its transaction in place", async () => {
+  const { call, a, cats } = await start();
+  const d = await draft(call, a);
+  assert.deepEqual(await call("receipts.delete", { id: d.id }), { ok: true, removed_files: [`${a}/${fileNo}.jpg`] });
+  assert.equal((await call("receipts.list", {})).length, 0);
+  await rejects(call("receipts.delete", { id: d.id }), 404);
+
+  const s = await draft(call, a);
+  await call("receipts.commit", { items: [{ id: s.id, amount: "125", date: "2026-11-09", category_id: cats["expense:เดินทาง"] }] });
+  await call("receipts.delete", { id: s.id });
+  assert.equal((await call("transactions.list", {}))[0].receipt_id, null);
+});
+
+test("deleting a category clears it from pending receipts", async () => {
+  const { call, a } = await start();
+  const d = await draft(call, a);
+  await call("categories.delete", { id: d.category_id });
+  assert.equal((await call("receipts.list", {}))[0].category_id, null);
+});
+
+test("B cannot commit, update, delete or fetch the file of A's receipt", async () => {
+  const { call, callB, a, catsB } = await start();
+  const d = await draft(call, a);
+  await rejects(callB("receipts.commit", { items: [{ id: d.id, amount: "1", date: "2026-11-09", category_id: catsB["expense:เดินทาง"] }] }), 404);
+  await rejects(callB("receipts.update", { id: d.id, amount: "1" }), 404);
+  await rejects(callB("receipts.delete", { id: d.id }), 404);
+  await rejects(callB("receipts.file", { id: d.id }), 404);
+  assert.equal((await callB("receipts.list", {})).length, 0);
+  assert.equal((await call("receipts.list", {}))[0].amount, 125);
+});
