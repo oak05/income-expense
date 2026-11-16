@@ -1,4 +1,15 @@
-// GET /api/session -> {authenticated}; lets the login page skip itself when already signed in
-import { SESSION_COOKIE, handler, json, readCookie, sessionValid } from "../lib/server.js";
+// GET /api/session -> {authenticated, email}; lets the login page skip itself when already signed in
+import { handler, json } from "../lib/server.js";
+import { AuthExpired, getUser } from "../lib/supabase.js";
+import { clearSessionCookies, hasSessionCookie, withUser } from "../lib/session.js";
 
-export const GET = handler(async (request) => json({ authenticated: sessionValid(readCookie(request, SESSION_COOKIE)) }));
+export const GET = handler(async (request) => {
+  if (!hasSessionCookie(request)) return json({ authenticated: false });
+  const res = await withUser(request, async (user) => {
+    const u = await getUser(user.token);
+    if (!u) throw new AuthExpired(); // e.g. the account was deleted
+    return json({ authenticated: true, email: u.email });
+  });
+  if (res.status === 401) return json({ authenticated: false }, 200, { "set-cookie": clearSessionCookies() });
+  return res;
+});

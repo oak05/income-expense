@@ -1,17 +1,32 @@
-// POST /api/login {password} -> sets the session cookie
-import {
-  SESSION_DAYS, callBackend, clientKey, config, createSession, handler, HttpError, json,
-  passwordMatches, readJson, requireSameOrigin, sessionCookie,
-} from "../lib/server.js";
+// POST /api/login {email, password} -> signs in with Supabase Auth and sets the session cookies
+//
+// Every sign-in reaches Supabase from Vercel's servers, so Supabase's own per-address limit would count all users
+// together. Failures are therefore counted here per caller address + email (8 wrong passwords = wait 15 minutes),
+// in the database through auth_throttle with the service key.
+// (Checked 2026-11: Supabase Auth can take the real address from an "Sb-Forwarded-For" header, but only on
+// requests made with a secret API key and after a project security setting is switched on; sign-in here uses the
+// publishable/anon key, so this app keeps its own throttle. See supabase.com/docs/guides/auth/rate-limits.)
+import { clientKey, config, handler, HttpError, json, readJson, requireSameOrigin, sha256 } from "../lib/server.js";
+import { serviceRpc, signIn } from "../lib/supabase.js";
+import { sessionCookies } from "../lib/session.js";
 
 export const POST = handler(async (request) => {
   requireSameOrigin(request);
   const cfg = config();
   const body = await readJson(request, 2000);
-  const ok = passwordMatches(body.password, cfg);
-  // the backend counts failures per caller address and blocks for 15 minutes after 8 of them
-  const { blocked } = await callBackend("auth.attempt", { key: clientKey(request), ok }, cfg);
-  if (blocked) throw new HttpError(429, "ใส่รหัสผ่านผิดหลายครั้งเกินไป รอ 15 นาทีแล้วลองใหม่");
-  if (!ok) throw new HttpError(401, "รหัสผ่านไม่ถูกต้อง");
-  return json({ ok: true }, 200, { "set-cookie": sessionCookie(createSession(cfg), SESSION_DAYS * 86400) });
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const password = typeof body.password === "string" ? body.password : "";
+  if (!email || !password) throw new HttpError(401, "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+
+  const throttle = (outcome) => serviceRpc("auth_throttle", { p_kind: "login", p_key: sha256(clientKey(request) + "\n" + email), p_outcome: outcome }, cfg);
+  if ((await throttle("check")).blocked) throw new HttpError(429, "ใส่รหัสผ่านผิดหลายครั้งเกินไป รอ 15 นาทีแล้วลองใหม่");
+  let session;
+  try {
+    session = await signIn(email, password, cfg);
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 401) await throttle("fail");
+    throw err;
+  }
+  await throttle("ok");
+  return json({ ok: true }, 200, { "set-cookie": sessionCookies(session) });
 });

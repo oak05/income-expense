@@ -1,8 +1,9 @@
-// Local stand-in for the whole cloud setup, with no Google or Vercel account needed:
-//   - "Apps Script": the real Code.gs + Parser.gs running on fake Google services (data lives in memory)
+// Local stand-in for the whole cloud setup, with no Supabase, Google or Vercel account needed:
+//   - "Supabase": dev/fake-supabase.mjs over PGlite with the real migrations in cloud/supabase/migrations
+//   - "Apps Script OCR": a fake web app that returns sample receipt texts
 //   - "Vercel": the real functions from cloud/vercel/api and the static files from cloud/vercel/public
 //
-//   node cloud/dev/server.mjs            -> http://localhost:3000  (password: dev-password)
+//   node cloud/dev/server.mjs            -> http://localhost:3000  (dev@example.com / dev-password)
 //
 // Used by the tests and for trying the app before deploying. Data is gone when the process stops.
 import http from "node:http";
@@ -11,7 +12,8 @@ import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { loadBackend } from "./fake-google.mjs";
+import { createDb, createUser } from "./pg.mjs";
+import { startFakeSupabase } from "./fake-supabase.mjs";
 
 const VERCEL_DIR = fileURLToPath(new URL("../vercel/", import.meta.url));
 const PUBLIC_DIR = join(VERCEL_DIR, "public");
@@ -41,16 +43,25 @@ function readBody(req) {
   });
 }
 
-/** The fake Apps Script web app. Like the real one, a POST is answered with a redirect to the JSON. */
-async function startBackendServer(backend, port = 0) {
+/**
+ * The fake OCR web app (Apps Script): POST {secret, mime, data} -> {ok, data: {text}}.
+ * Like the real one, a POST is answered with a redirect to the JSON.
+ */
+async function startOcrServer({ secret, ocr }, port = 0) {
   const responses = new Map();
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
     if (req.method === "POST" && url.pathname === "/macros/s/FAKE/exec") {
-      const body = (await readBody(req)).toString("utf8");
-      const out = backend.gs.doPost({ postData: { contents: body, type: req.headers["content-type"] } });
+      let out;
+      try {
+        const body = JSON.parse((await readBody(req)).toString("utf8"));
+        if (body.secret !== secret) out = { ok: false, status: 401, error: "unauthorized" };
+        else out = { ok: true, data: { text: String(await ocr({ mime: body.mime, data: body.data })) } };
+      } catch (err) {
+        out = { ok: false, status: err?.status || 500, error: String(err?.message || err) };
+      }
       const id = randomUUID();
-      responses.set(id, out.getContent());
+      responses.set(id, JSON.stringify(out));
       res.writeHead(302, { location: `/macros/echo?id=${id}` }).end();
     } else if (req.method === "GET" && url.pathname === "/macros/echo" && responses.has(url.searchParams.get("id"))) {
       const text = responses.get(url.searchParams.get("id"));
@@ -128,27 +139,43 @@ async function startAppServer(port = 3000) {
   return { server, url: `http://localhost:${actualPort}` };
 }
 
+export const DEV_USERS = {
+  a: { email: "dev@example.com", password: "dev-password" },
+  b: { email: "dev2@example.com", password: "dev-password" },
+};
+
 /**
- * Starts both halves and points the Vercel functions at the fake backend through process.env.
- * @returns {{url: string, backendUrl: string, backend: object, password: string, close: () => Promise<void>}}
+ * Starts the fake Supabase, the fake OCR and the app, and points the Vercel functions at them through process.env.
+ * @returns {Promise<{url: string, db: object, supabase: object, ocr: object, users: typeof DEV_USERS, mailbox: object[], close: () => Promise<void>}>}
  */
-export async function startDev({ port = 3000, password = "dev-password", ocr } = {}) {
+export async function startDev({ port = 3000, ocr, accessTtlSeconds = 3600, log = false } = {}) {
   let n = 0;
-  const backend = loadBackend({ ocr: ocr || (() => SAMPLE_OCR[n++ % SAMPLE_OCR.length]) });
-  backend.setup();
-  const back = await startBackendServer(backend);
+  const db = await createDb();
+  for (const u of Object.values(DEV_USERS)) await createUser(db, u);
+  const supabase = await startFakeSupabase({ db, accessTtlSeconds, log });
+  const ocrSecret = "dev-ocr-secret-0123456789abcdef";
+  const ocrServer = await startOcrServer({ secret: ocrSecret, ocr: ocr || (() => SAMPLE_OCR[n++ % SAMPLE_OCR.length]) });
   Object.assign(process.env, {
-    APP_PASSWORD: password,
-    SESSION_SECRET: "dev-session-secret-0123456789abcdef-not-for-production",
-    APPS_SCRIPT_URL: back.url,
-    APPS_SCRIPT_SECRET: backend.secret,
+    SUPABASE_URL: supabase.url,
+    SUPABASE_ANON_KEY: supabase.anonKey,
+    SUPABASE_SERVICE_ROLE_KEY: supabase.serviceKey,
+    APPS_SCRIPT_URL: ocrServer.url,
+    APPS_SCRIPT_SECRET: ocrSecret,
   });
   const app = await startAppServer(port);
-  const close = () => Promise.all([app.server, back.server].map((s) => new Promise((r) => { s.closeAllConnections(); s.close(r); })));
-  return { url: app.url, backendUrl: back.url, backend, password, close };
+  supabase.siteUrl = app.url;
+  const stop = (s) => new Promise((r) => { s.closeAllConnections(); s.close(r); });
+  const close = async () => {
+    await Promise.all([stop(app.server), stop(ocrServer.server), supabase.close()]);
+    await db.close();
+  };
+  return { url: app.url, db, supabase, ocr: ocrServer, users: DEV_USERS, mailbox: supabase.mailbox, close };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const dev = await startDev({ port: Number(process.env.PORT) || 3000 });
-  console.log(`\n  สมุดรายรับรายจ่าย (โหมดทดลองในเครื่อง)\n  เปิด: ${dev.url}\n  รหัสผ่าน: ${dev.password}\n  ข้อมูลอยู่ในหน่วยความจำ ปิดโปรแกรมแล้วหาย — OCR เป็นข้อความตัวอย่าง ไม่ได้อ่านรูปจริง\n`);
+  const dev = await startDev({ port: Number(process.env.PORT) || 3000, log: true });
+  console.log(`\n  สมุดรายรับรายจ่าย (โหมดทดลองในเครื่อง)\n  เปิด: ${dev.url}`
+    + `\n  บัญชีทดลอง: ${DEV_USERS.a.email} / ${DEV_USERS.a.password}  และ  ${DEV_USERS.b.email} / ${DEV_USERS.b.password}`
+    + "\n  อีเมล (ยืนยันการสมัคร / ตั้งรหัสผ่านใหม่) จะแสดงในหน้าต่างนี้แทนการส่งจริง"
+    + "\n  ข้อมูลอยู่ในหน่วยความจำ ปิดโปรแกรมแล้วหาย — OCR เป็นข้อความตัวอย่าง ไม่ได้อ่านรูปจริง\n");
 }

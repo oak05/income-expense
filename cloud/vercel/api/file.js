@@ -1,20 +1,26 @@
-// GET /api/file?id=12 -> the receipt image or PDF kept in Google Drive, for a signed-in user
-import { callBackend, handler, HttpError, requireSession } from "../lib/server.js";
+// GET /api/file?id=12 -> the receipt image or PDF kept in Supabase Storage, for its owner
+import { handler, HttpError } from "../lib/server.js";
+import { rpc, storageDownload } from "../lib/supabase.js";
+import { hasSessionCookie, withUser } from "../lib/session.js";
 
-const TYPES = new Set(["image/jpeg", "image/png", "application/pdf"]);
+const EXT = { "image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf" };
 
 export const GET = handler(async (request) => {
-  requireSession(request);
+  if (!hasSessionCookie(request)) throw new HttpError(401, "ยังไม่ได้เข้าสู่ระบบ");
   const id = Number(new URL(request.url).searchParams.get("id"));
   if (!Number.isInteger(id) || id < 1) throw new HttpError(400, "ไม่พบไฟล์");
-  const file = await callBackend("receipts.file", { id });
-  if (!TYPES.has(file.mime)) throw new HttpError(415, "ไฟล์ชนิดนี้เปิดดูไม่ได้");
-  return new Response(Buffer.from(file.data, "base64"), {
-    headers: {
-      "content-type": file.mime,
-      "content-disposition": `inline; filename="receipt-${id}.${file.mime === "application/pdf" ? "pdf" : file.mime === "image/png" ? "png" : "jpg"}"`,
-      "cache-control": "private, max-age=3600",
-      "x-content-type-options": "nosniff",
-    },
+  return withUser(request, async (user) => {
+    const info = await rpc("api_receipts_file", { id }, user.token);
+    if (!EXT[info.mime]) throw new HttpError(415, "ไฟล์ชนิดนี้เปิดดูไม่ได้");
+    const file = await storageDownload(user.token, info.storage_path);
+    if (!file) throw new HttpError(404, "ไม่พบไฟล์ใบเสร็จ");
+    return new Response(file.bytes, {
+      headers: {
+        "content-type": info.mime, // what the database recorded from the file's bytes, not what Storage says
+        "content-disposition": `inline; filename="receipt-${id}.${EXT[info.mime]}"`,
+        "cache-control": "private, max-age=3600",
+        "x-content-type-options": "nosniff",
+      },
+    });
   });
 });
