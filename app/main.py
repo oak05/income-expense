@@ -35,7 +35,7 @@ from starlette.concurrency import run_in_threadpool
 from . import db, migrate
 from . import receipts as rc
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.2.1"
 log = logging.getLogger("uvicorn.error")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TZ = ZoneInfo(os.environ.get("TZ") or "Asia/Bangkok")
@@ -58,7 +58,6 @@ FIELD_TH = {
     "type": "ประเภท",
     "name": "ชื่อหมวดหมู่",
     "color": "สี",
-    "budget": "งบประมาณ",
     "month": "เดือน",
     "year": "ปี",
 }
@@ -237,13 +236,6 @@ JOIN categories c ON c.id = t.category_id
 """
 
 
-def category_out(row: sqlite3.Row) -> dict:
-    d = dict(row)
-    satang = d.pop("budget_satang", None)
-    d["budget"] = baht(satang) if satang else None
-    return d
-
-
 def tx_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
     d["amount"] = baht(d.pop("amount_satang"))
@@ -287,8 +279,6 @@ class CategoryIn(BaseModel):
 class CategoryUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     color: str = Field(pattern=COLOR_RE)
-    # monthly budget in baht; left out = unchanged, null or 0 = no budget
-    budget: Decimal | None = Field(default=None, ge=0, le=Decimal("9999999999.99"))
 
     @field_validator("name")
     @classmethod
@@ -312,14 +302,14 @@ def list_categories():
     with db.session() as conn:
         rows = conn.execute(
             """
-            SELECT c.id, c.name, c.type, c.color, c.sort_order, c.budget_satang, COUNT(t.id) AS tx_count
+            SELECT c.id, c.name, c.type, c.color, c.sort_order, COUNT(t.id) AS tx_count
             FROM categories c
             LEFT JOIN transactions t ON t.category_id = c.id
             GROUP BY c.id
             ORDER BY c.sort_order, c.id
             """
         ).fetchall()
-    return [category_out(r) for r in rows]
+    return [dict(r) for r in rows]
 
 
 @app.post("/api/categories", status_code=201)
@@ -334,26 +324,20 @@ def create_category(body: CategoryIn):
         except sqlite3.IntegrityError:
             raise HTTPException(409, f"มีหมวดหมู่ \"{body.name}\" อยู่แล้ว") from None
         row = conn.execute("SELECT *, 0 AS tx_count FROM categories WHERE id = ?", (cur.lastrowid,)).fetchone()
-    return category_out(row)
+    return dict(row)
 
 
 @app.put("/api/categories/{cid}")
 def update_category(cid: int, body: CategoryUpdate):
     with db.session() as conn:
-        cat = conn.execute("SELECT type FROM categories WHERE id = ?", (cid,)).fetchone()
-        if cat is None:
+        if conn.execute("SELECT 1 FROM categories WHERE id = ?", (cid,)).fetchone() is None:
             raise HTTPException(404, "ไม่พบหมวดหมู่")
         try:
             conn.execute("UPDATE categories SET name = ?, color = ? WHERE id = ?", (body.name, body.color, cid))
         except sqlite3.IntegrityError:
             raise HTTPException(409, f"มีหมวดหมู่ \"{body.name}\" อยู่แล้ว") from None
-        if "budget" in body.model_fields_set:
-            budget = to_satang(body.budget) if body.budget else None
-            if budget and cat["type"] != "expense":
-                raise HTTPException(400, "ตั้งงบประมาณได้เฉพาะหมวดรายจ่าย ไม่ใช่หมวดรายรับ")
-            conn.execute("UPDATE categories SET budget_satang = ? WHERE id = ?", (budget or None, cid))
         row = conn.execute("SELECT * FROM categories WHERE id = ?", (cid,)).fetchone()
-    return category_out(row)
+    return dict(row)
 
 
 @app.delete("/api/categories/{cid}")
