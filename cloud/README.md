@@ -1,19 +1,23 @@
-# สมุดรายรับรายจ่าย — เวอร์ชัน Cloud (Vercel + Apps Script + Google Sheet)
+# สมุดรายรับรายจ่าย — เวอร์ชัน Cloud (Vercel + Supabase + Apps Script OCR)
 
-เวอร์ชันนี้ไม่ต้องเปิดคอมหรือ Docker ทิ้งไว้ เปิดจากมือถือหรือเครื่องไหนก็ได้ผ่านอินเทอร์เน็ต
+เปิดจากมือถือหรือเครื่องไหนก็ได้ผ่านอินเทอร์เน็ต **ใครก็สมัครใช้ได้ และแต่ละบัญชีมีสมุดของตัวเอง** คนอื่นมองไม่เห็น
 
 ```
-เบราว์เซอร์ ──HTTPS──> Vercel (หน้าเว็บ + ล็อกอิน + /api) ──HTTPS + รหัสลับ──> Apps Script ──> Google Sheet (ข้อมูล)
-                                                                                       └──> Google Drive (รูปใบเสร็จ + OCR)
+เบราว์เซอร์ ──/api/*──> Vercel Functions ──┬─ Supabase Auth      (สมัคร / เข้าสู่ระบบ / อีเมลยืนยัน / ตั้งรหัสผ่านใหม่)
+ (หน้าเว็บเดิม)        (cookie, ตรวจคำขอ)   ├─ Supabase Postgres  (ข้อมูลทั้งหมด แยกตามบัญชีด้วย row-level security)
+                                           ├─ Supabase Storage   (รูป/PDF ใบเสร็จ แยกโฟลเดอร์ตามบัญชี)
+                                           └─ Apps Script        (อ่านตัวอักษรจากใบเสร็จด้วย Google Drive OCR — ไม่เก็บอะไร)
 ```
 
 | ส่วน | อยู่ที่ไหน | ทำอะไร |
 |---|---|---|
-| หน้าเว็บ | `vercel/public/` | หน้าสมุดบัญชี, สแกนใบเสร็จ, ล็อกอิน (HTML/CSS/JS ไม่มี build step) |
-| ฟังก์ชัน | `vercel/api/` + `vercel/lib/server.js` | ตรวจรหัสผ่าน, ออก session cookie, ส่งต่อคำสั่งไป Apps Script |
-| หลังบ้าน | `apps-script/Code.gs`, `Parser.gs` | อ่าน/เขียน Google Sheet, เก็บไฟล์ใน Drive, OCR, หายอดจากใบเสร็จ |
-| ทดลองในเครื่อง | `dev/` | จำลอง Google + Vercel ในเครื่อง ใช้กับเทสและ `npm run dev` |
-| เทส | `tests/` | 62 เทส รันด้วย `npm test` (ต้องมี Node.js 22+) |
+| หน้าเว็บ | `vercel/public/` | สมุดบัญชี, สแกนใบเสร็จ, เข้าสู่ระบบ, สมัคร, ลืมรหัสผ่าน (HTML/CSS/JS ไม่มี build step) |
+| ฟังก์ชัน | `vercel/api/` + `vercel/lib/` | เข้าสู่ระบบกับ Supabase, เก็บ session ใน cookie, เรียกฐานข้อมูลในนามผู้ใช้, เก็บไฟล์, เรียก OCR, หายอดจากใบเสร็จ |
+| ฐานข้อมูล | `supabase/migrations/` | ตาราง, สิทธิ์แยกตามบัญชี, คำสั่งของแอป (เป็นฟังก์ชันใน Postgres ทำงานครบทั้งชุดหรือไม่ทำเลย) |
+| อีเมล | `supabase/templates/` | ข้อความอีเมลยืนยันการสมัครและตั้งรหัสผ่านใหม่ (ภาษาไทย) |
+| OCR | `apps-script/Ocr.gs` | รับไฟล์ → ให้ Drive อ่านตัวอักษร → ส่งข้อความกลับ → ลบไฟล์ชั่วคราว |
+| ทดลองในเครื่อง | `dev/` | Supabase จำลอง (PGlite = Postgres ในเครื่อง), Apps Script จำลอง, ใช้กับเทสและ `npm run dev` |
+| เทส | `tests/` | รันด้วย `npm test` (ต้องมี Node.js 22+) |
 
 เวอร์ชันในเครื่องเดิม (โฟลเดอร์ `app/`) ยังอยู่ครบและใช้ได้เหมือนเดิม สองเวอร์ชันไม่ได้ใช้ข้อมูลร่วมกัน
 
@@ -21,129 +25,172 @@
 
 ```bash
 cd cloud
-npm run dev        # เปิด http://localhost:3000  รหัสผ่าน: dev-password
+npm install        # ครั้งแรกครั้งเดียว (ติดตั้ง PGlite สำหรับทดลอง/เทสเท่านั้น)
+npm run dev        # เปิด http://localhost:3000
 ```
 
-โหมดนี้ใช้ Google จำลอง: ข้อมูลอยู่ในหน่วยความจำ และ OCR คืนข้อความตัวอย่าง (ไม่ได้อ่านรูปจริง)
+- บัญชีทดลอง: `dev@example.com` / `dev-password` และ `dev2@example.com` / `dev-password` (ลองดูว่าสองบัญชีเห็นข้อมูลแยกกัน)
+- สมัครบัญชีใหม่ได้: อีเมลยืนยันและอีเมลตั้งรหัสผ่านใหม่ **จะแสดงในหน้าต่าง terminal** แทนการส่งจริง — คัดลอกลิงก์ไปเปิด
+- ข้อมูลอยู่ในหน่วยความจำ ปิดโปรแกรมแล้วหาย; OCR คืนข้อความตัวอย่าง (ไม่ได้อ่านรูปจริง)
 
 ## ติดตั้งจริง
 
-ต้องมี: บัญชี Google (Gmail ส่วนตัวใช้ได้), บัญชี GitHub, บัญชี Vercel (แพ็กเกจ Hobby ฟรี)
+ต้องมี: บัญชี Supabase (แพ็กเกจ Free), บัญชี Google, บัญชี GitHub, บัญชี Vercel (Hobby ฟรี),
+และบริการส่งอีเมล (เช่น Resend หรือ Brevo มีแพ็กเกจฟรี) — **จำเป็น** เพราะต้องส่งอีเมลให้คนที่สมัคร
 
-### ขั้นที่ 1 — Google Sheet + Apps Script
+### ขั้นที่ 1 — Supabase: ฐานข้อมูล
 
-1. สร้าง Google Sheet ใหม่ ตั้งชื่อเช่น "สมุดรายรับรายจ่าย"
-2. เมนู **Extensions (ส่วนขยาย) → Apps Script**
-3. ลบโค้ดตัวอย่างใน `Code.gs` แล้ววางเนื้อหาจาก `apps-script/Code.gs`
-4. กด **+** ข้าง "Files" → **Script** → ตั้งชื่อ `Parser` → วางเนื้อหาจาก `apps-script/Parser.gs`
-5. กด **+** ข้าง "Services" → เลือก **Drive API** → Add (ใช้อ่านตัวอักษรจากรูป)
-6. บันทึก แล้วเลือกฟังก์ชัน **`setup`** ที่แถบด้านบน → กด **Run**
-   - ครั้งแรก Google จะขอสิทธิ์เข้าถึง Sheet/Drive/Docs ของคุณ ให้กดอนุญาต
-     (ถ้าขึ้นว่า "Google hasn't verified this app" ให้กด Advanced → Go to (ชื่อโปรเจกต์) — เพราะเป็นสคริปต์ของคุณเอง)
-7. ดู **Execution log** ด้านล่าง จะมีบรรทัด `APPS_SCRIPT_SECRET (ใส่ใน Vercel): ...` — คัดลอกค่านี้ไว้
-   (ดูอีกครั้งได้ด้วยการรันฟังก์ชัน `showSecret`)
-8. กด **Deploy → New deployment** → ประเภท **Web app**
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-   - กด Deploy แล้วคัดลอก **Web app URL** (ลงท้ายด้วย `/exec`)
+1. ที่ [supabase.com](https://supabase.com) กด **New project** — Region เลือก **Southeast Asia (Singapore)** ตั้งรหัสผ่านฐานข้อมูลแล้วเก็บไว้
+2. เมนู **SQL Editor** → **New query** → วางเนื้อหาไฟล์ใน `supabase/migrations/` **ทีละไฟล์ตามลำดับเลข** (`0001` → `0006`) แล้วกด **Run** ทุกไฟล์
+   - หรือใช้ Supabase CLI: `cd cloud && npx supabase link --project-ref <ref>` แล้ว `npx supabase db push`
+3. เมนู **Project Settings → API Keys** คัดลอก 3 ค่าไว้ใช้ในขั้นที่ 4:
+   - **Project URL** (เช่น `https://abcd.supabase.co`)
+   - **Publishable key** (`sb_publishable_…`) หรือ anon key แบบเดิม (`eyJ…`)
+   - **Secret key** (`sb_secret_…`) หรือ service_role key แบบเดิม — **ห้ามเปิดเผย** แอปใช้คีย์นี้แค่นับการใส่รหัสผ่านผิดเท่านั้น
 
-ชื่อเมนูด้านบนเป็นภาษาอังกฤษ ถ้าหน้าจอของคุณเป็นภาษาไทย ตำแหน่งปุ่มจะเหมือนกัน
+### ขั้นที่ 2 — Supabase: การสมัครและอีเมล
 
-`setup` สร้างแท็บ `categories`, `transactions`, `receipts`, `meta` และโฟลเดอร์ "รายรับรายจ่าย - ใบเสร็จ" ใน Drive ให้
-แท็บเปล่าที่ติดมากับไฟล์ (เช่น "แผ่น1") ลบได้
+1. **Authentication → Sign In / Providers → Email**: เปิด **Enable Email provider**, เปิด **Confirm email**,
+   เปิด **Allow new users to sign up**, ตั้ง **Minimum password length = 8**
+2. **Authentication → URL Configuration**: **Site URL** = URL ของแอปบน Vercel (เช่น `https://ชื่อโปรเจกต์.vercel.app`)
+   — ยังไม่มี URL ให้กลับมาตั้งหลังขั้นที่ 4 (อีเมลจะลิงก์ผิดจนกว่าจะตั้ง)
+3. **ตั้งบริการส่งอีเมล (SMTP)** — อีเมลในตัวของ Supabase ส่งได้เฉพาะอีเมลของทีมโปรเจกต์ และจำกัดจำนวนมาก
+   คนอื่นที่สมัครจะไม่ได้รับอีเมล ตัวอย่างกับ **Resend**:
+   1. สมัคร [resend.com](https://resend.com) → **Domains → Add Domain** ใส่โดเมนที่คุณมี แล้วเพิ่ม DNS record ตามที่บอกจน Verified
+   2. **API Keys → Create API Key** (สิทธิ์ Sending access) คัดลอกไว้
+   3. ที่ Supabase **Authentication → Emails → SMTP Settings** เปิด **Enable Custom SMTP** แล้วใส่
+      Host `smtp.resend.com`, Port `465`, Username `resend`, Password = API key ข้อ 2,
+      Sender email = `no-reply@โดเมนของคุณ`, Sender name = `สมุดรายรับรายจ่าย`
+   - ไม่มีโดเมน: ใช้ Brevo ได้ (ยืนยันอีเมลผู้ส่งทีละอีเมลแทนโดเมน) — ค่า SMTP ดูในหน้า SMTP & API ของ Brevo
+4. **Authentication → Emails → Templates**:
+   - **Confirm signup**: Subject `ยืนยันอีเมล — สมุดรายรับรายจ่าย`, Body = เนื้อหา `supabase/templates/confirm-signup.html`
+   - **Reset password**: Subject `ตั้งรหัสผ่านใหม่ — สมุดรายรับรายจ่าย`, Body = เนื้อหา `supabase/templates/reset-password.html`
+   - ลิงก์ในเทมเพลตพาไปหน้า `confirm.html` ของแอปเอง ที่ต้องกดปุ่มอีกครั้ง (กันโปรแกรมสแกนลิงก์ในอีเมลใช้ลิงก์ไปก่อน) — อย่าเปลี่ยนเป็น `{{ .ConfirmationURL }}`
+5. **Authentication → Rate Limits**: ค่า "sign-ups and sign-ins" นับต่อที่อยู่ IP แต่ทุกคำขอมาจากเซิร์ฟเวอร์ Vercel
+   ถ้าผู้ใช้หลายคนเข้าสู่ระบบพร้อมกันแล้วเจอ "ระบบบัญชีผู้ใช้ทำงานไม่สำเร็จ" ให้เพิ่มค่านี้
+   (แอปมีตัวจำกัดของตัวเองต่อผู้ใช้จริงอยู่แล้ว ดูหัวข้อความปลอดภัย)
 
-> "Anyone" หมายถึงใครก็เรียก URL นี้ได้ แต่ทุกคำสั่งต้องมีรหัสลับ `APPS_SCRIPT_SECRET` (64 ตัวอักษรแบบสุ่ม)
-> ถ้าไม่มีจะได้แค่คำตอบว่า unauthorized — อย่าเปิดเผย URL คู่กับรหัสลับนี้
+### ขั้นที่ 3 — Google Apps Script: อ่านใบเสร็จ
 
-ใช้ `clasp` แทนการวางโค้ดก็ได้: `clasp create --type sheets --rootDir apps-script` แล้ว `clasp push`
-(ไฟล์ `appsscript.json` ตั้งค่า Drive API และเว็บแอปไว้ให้แล้ว)
+1. ไปที่ [script.google.com](https://script.google.com) → **New project** ตั้งชื่อเช่น "OCR ใบเสร็จ"
+2. ลบโค้ดตัวอย่างใน `Code.gs` แล้ววางเนื้อหาจาก `apps-script/Ocr.gs`
+3. กด **+** ข้าง "Services" → เลือก **Drive API** → Add
+4. บันทึก แล้วเลือกฟังก์ชัน **`setup`** → กด **Run** (ครั้งแรก Google ขอสิทธิ์ Drive/Docs ให้กดอนุญาต
+   ถ้าขึ้นว่า "Google hasn't verified this app" ให้กด Advanced → Go to … เพราะเป็นสคริปต์ของคุณเอง)
+5. ดู **Execution log** จะมีบรรทัด `APPS_SCRIPT_SECRET (ใส่ใน Vercel): …` — คัดลอกไว้ (ดูอีกครั้งได้ด้วย `showSecret`)
+6. **Deploy → New deployment** → ประเภท **Web app**, Execute as **Me**, Who has access **Anyone** → Deploy → คัดลอก **Web app URL** (ลงท้าย `/exec`)
 
-### ขั้นที่ 2 — Vercel
+สคริปต์นี้ไม่มีข้อมูลของใคร: รับไฟล์ อ่านตัวอักษร แล้วลบไฟล์ชั่วคราวทันที ทุกคำขอต้องมีรหัสลับ
 
-1. push โปรเจกต์นี้ขึ้น GitHub
-2. ที่ Vercel กด **Add New → Project** → เลือก repo
-   - **Root Directory:** `cloud/vercel`
-   - **Framework Preset:** Other (ไม่ต้องใส่ Build Command)
-3. ใส่ **Environment Variables** 4 ตัว แล้วกด Deploy
+### ขั้นที่ 4 — Vercel
+
+1. push โปรเจกต์ขึ้น GitHub
+2. ที่ Vercel กด **Add New → Project** → เลือก repo → **Root Directory:** `cloud/vercel`, **Framework Preset:** Other
+3. ใส่ **Environment Variables** 5 ตัว แล้วกด Deploy
 
 | ชื่อ | ค่า |
 |---|---|
-| `APP_PASSWORD` | รหัสผ่านเข้าแอป อย่างน้อย 8 ตัว (แนะนำ 16 ตัวขึ้นไป แบบสุ่ม เพราะแอปเปิดจากอินเทอร์เน็ตได้) |
-| `SESSION_SECRET` | ข้อความสุ่มอย่างน้อย 32 ตัว สร้างด้วย `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `APPS_SCRIPT_URL` | URL เว็บแอปจากขั้นที่ 1 ข้อ 8 |
-| `APPS_SCRIPT_SECRET` | ค่าจากขั้นที่ 1 ข้อ 7 |
+| `SUPABASE_URL` | Project URL จากขั้นที่ 1 ข้อ 3 |
+| `SUPABASE_ANON_KEY` | Publishable key (หรือ anon key) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret key (หรือ service_role key) |
+| `APPS_SCRIPT_URL` | Web app URL จากขั้นที่ 3 ข้อ 6 |
+| `APPS_SCRIPT_SECRET` | ค่าจากขั้นที่ 3 ข้อ 5 |
 
-4. เปิด URL ที่ Vercel ให้ (เช่น `https://ชื่อโปรเจกต์.vercel.app`) → ใส่รหัสผ่าน
+4. นำ URL ที่ Vercel ให้ไปใส่ **Site URL** ใน Supabase (ขั้นที่ 2 ข้อ 2)
+5. เปิด URL → **สมัครสมาชิก** → เปิดลิงก์ในอีเมล → กดยืนยัน → เริ่มใช้งาน
 
-ไม่ใช้ GitHub ก็ได้: `cd cloud/vercel && npx vercel` แล้วตั้งค่าตัวแปรด้วย `npx vercel env add`
+### ตรวจหลังติดตั้ง (ทำครั้งเดียวกับระบบจริง)
 
-### ย้ายข้อมูลจากเวอร์ชัน Docker
+เทสในเครื่องใช้ Supabase จำลอง จึงควรลองกับของจริงหนึ่งรอบ:
 
-1. เวอร์ชัน Docker: **นำเข้า / สำรองข้อมูล → ดาวน์โหลด CSV ทั้งหมด**
-2. เวอร์ชัน Cloud: **นำเข้า / ส่งออก → นำเข้า CSV**
+- [ ] สมัครด้วยอีเมลจริง ได้อีเมลภาษาไทย กดลิงก์แล้วกดปุ่ม → เข้าสู่ระบบได้ เห็นหมวดหมู่เริ่มต้น 15 หมวด
+- [ ] จดรายการ, ดูภาพรวมเดือน, ตั้งงบประมาณหมวด
+- [ ] สแกนใบเสร็จ 1 ใบ → อ่านยอดได้ → บันทึก → กดดูรูปใบเสร็จจากรายการได้
+- [ ] สมัครอีกบัญชี (อีกอีเมล) → ไม่เห็นข้อมูลของบัญชีแรก
+- [ ] ออกจากระบบ → ลืมรหัสผ่าน → ได้อีเมล → ตั้งรหัสใหม่ → เข้าด้วยรหัสใหม่ได้ รหัสเก่าใช้ไม่ได้
+- [ ] ลบบัญชีที่สองจากเมนู → เข้าสู่ระบบด้วยบัญชีนั้นไม่ได้อีก และใน Storage ไม่มีโฟลเดอร์ของบัญชีนั้น
 
-ได้รายการและหมวดหมู่ครบ (นำเข้าซ้ำได้ไม่เบิ้ล) สิ่งที่ไม่ตามมา: รูปใบเสร็จ และสีของหมวดหมู่ที่สร้างเอง
+## ย้ายข้อมูลจากเวอร์ชัน Google Sheet หรือ Docker
 
-## ใช้งานต่างจากเวอร์ชัน Docker ตรงไหน
+1. เวอร์ชันเดิม: **นำเข้า / ส่งออก → ดาวน์โหลด CSV ทั้งหมด** (ทำ **ก่อน** เปลี่ยนโค้ด Apps Script)
+2. เวอร์ชันนี้: สมัคร → เข้าสู่ระบบ → **นำเข้า / ส่งออก → นำเข้า CSV**
 
-- **ช้ากว่า:** ทุกคำสั่งวิ่ง Vercel → Apps Script → Sheet ใช้เวลาราว 1–3 วินาที, อ่านใบเสร็จนานกว่านั้น
-- **สแกนใบเสร็จ:** เบราว์เซอร์ย่อรูปให้ไม่เกิน 2000 px / 2 MB ก่อนส่ง (ลบข้อมูลตำแหน่งในรูปไปด้วย), PDF ต้องไม่เกิน 2 MB,
-  ไฟล์ HEIC ที่เบราว์เซอร์เปิดไม่ได้ต้องแปลงเป็น JPG ก่อน
-- **สำรองข้อมูล:** ไม่มีไฟล์ .zip แล้ว ใช้ **ไฟล์ → ประวัติเวอร์ชัน** หรือ **ทำสำเนา** ของ Google Sheet แทน และยังดาวน์โหลด CSV ได้
-- **แก้ข้อมูลใน Sheet ตรง ๆ ได้** แต่อย่าเปลี่ยนชื่อแท็บ ลำดับคอลัมน์ หรือเลขในคอลัมน์ `id`
-- ออกจากระบบได้ที่ปุ่ม **ออกจากระบบ** (แถบด้านซ้าย หรือเมนู ⋯ บนมือถือ); session อยู่ได้ 30 วัน
-- **งบประมาณรายหมวด** ใช้ได้เหมือนเวอร์ชันในเครื่อง: ตั้งในเมนู *หมวดหมู่* ค่าเก็บในคอลัมน์ `budget` ของแท็บ `categories`
+ได้รายการและหมวดหมู่ครบ (นำเข้าซ้ำได้ไม่เบิ้ล) สิ่งที่ไม่ตามมา: รูปใบเสร็จ, สีของหมวดที่สร้างเอง และงบประมาณ (ตั้งใหม่ในเมนูหมวดหมู่)
+Google Sheet เดิมไม่ถูกลบ เก็บไว้เป็นสำเนาได้; ถ้าใช้โปรเจกต์ Apps Script เดิมสำหรับ OCR ให้แทนที่ `Code.gs` + `Parser.gs` ด้วย `Ocr.gs` แล้ว deploy เวอร์ชันใหม่
+
+## ใช้งานต่างจากเวอร์ชัน Google Sheet ตรงไหน
+
+- **หลายคนใช้ได้** แต่ละบัญชีมีสมุด หมวดหมู่ และใบเสร็จของตัวเอง
+- **เร็วกว่า:** ไม่ต้องผ่าน Apps Script ทุกคำสั่ง (ยกเว้นตอนอ่านใบเสร็จ)
+- **บันทึกครบหรือไม่บันทึกเลย:** บันทึกใบเสร็จหลายใบ, นำเข้า CSV, ลบหมวดแล้วย้ายรายการ — ถ้าผิดพลาดกลางทาง จะไม่มีอะไรถูกเขียน
+- **สำรองข้อมูล:** ดาวน์โหลด CSV ได้ทุกเมื่อ; Supabase แพ็กเกจฟรีไม่มีสำรองอัตโนมัติให้ดาวน์โหลด
+- เมนูบัญชี (แถบด้านซ้าย หรือเมนู ⋯ บนมือถือ): **เปลี่ยนรหัสผ่าน**, **ลบบัญชี** (ลบข้อมูลและรูปใบเสร็จทั้งหมด ย้อนกลับไม่ได้), **ออกจากระบบ**
+- รูปใบเสร็จรวมกันได้ไม่เกิน **100 MB ต่อบัญชี** (ลบใบเสร็จเก่าเพื่อเพิ่มที่)
+
+## ข้อจำกัดของ Supabase แพ็กเกจฟรี
+
+- **โปรเจกต์หยุดชั่วคราวเมื่อไม่มีการใช้งานราว 1 สัปดาห์** — แอปจะขึ้น "ติดต่อ Supabase ไม่ได้"
+  ให้เข้า Supabase Dashboard แล้วกด **Restore project** (ข้อมูลอยู่ครบ) ใช้งานทุกสัปดาห์จะไม่โดน
+- ฐานข้อมูล 500 MB, Storage 1 GB รวมทุกบัญชี — ใช้ส่วนตัว/ครอบครัวไม่ถึง
+- ถ้ามีคนสมัครมากหรือต้องการสำรองข้อมูลอัตโนมัติ ให้พิจารณาแพ็กเกจ Pro
 
 ## อัปเดต
 
 - **หน้าเว็บ / ฟังก์ชัน:** push ขึ้น GitHub แล้ว Vercel deploy ให้เอง
-- **หลังบ้าน:** วางโค้ดใหม่ใน Apps Script → รัน `setup` อีกครั้ง (ข้อมูลเดิมอยู่ครบ) →
-  **Deploy → Manage deployments → Edit → Version: New version** (URL เดิมยังใช้ได้)
-  ถ้าไม่สร้างเวอร์ชันใหม่ เว็บแอปจะยังรันโค้ดเก่า
-- **จากหลังบ้าน 2.0 → 2.1 (งบประมาณ):** ต้องอัปเดตหลังบ้านตามข้อบนด้วย ไม่อย่างนั้นตั้งงบแล้วจะไม่ถูกบันทึก —
-  การรัน `setup` จะเพิ่มหัวคอลัมน์ `budget` ในแท็บ `categories` ให้ ข้อมูลเดิมไม่เปลี่ยน
+- **ฐานข้อมูล:** ถ้ามีไฟล์ใหม่ใน `supabase/migrations/` ให้รันเฉพาะไฟล์ใหม่ตามลำดับ (ไฟล์เดิมรันซ้ำไม่ได้)
+- **OCR:** วางโค้ด `Ocr.gs` ใหม่ → **Deploy → Manage deployments → Edit → Version: New version** (URL เดิมยังใช้ได้)
 
 ## ความปลอดภัย
 
-- ข้อมูลอยู่ใน Google Sheet และ Drive ของบัญชีคุณ ไม่มีสำเนาที่ Vercel (Vercel เก็บแค่โค้ดและตัวแปร 4 ตัว)
-- เบราว์เซอร์ไม่เคยเห็น URL หรือรหัสลับของ Apps Script — คุยกับ `/api` ของ Vercel เท่านั้น
-- Cookie เป็น `HttpOnly; Secure; SameSite=Strict` ลงลายเซ็นด้วย HMAC; เปลี่ยน `APP_PASSWORD` หรือ `SESSION_SECRET` = ทุกเครื่องหลุดจากระบบ
+- **แยกข้อมูลตามบัญชีที่ฐานข้อมูล:** ทุกตารางมี row-level security — บัญชีหนึ่งอ่าน/แก้แถวของอีกบัญชีไม่ได้
+  แม้โค้ด Vercel ผิดพลาด เพราะ Vercel เรียกฐานข้อมูลด้วย token ของผู้ใช้คนนั้นเอง; ไฟล์ใน Storage ก็จำกัดตามโฟลเดอร์ของบัญชี
+- **คีย์ลับไม่ถึงเบราว์เซอร์:** เบราว์เซอร์คุยกับ `/api` ของ Vercel เท่านั้น ไม่เห็น URL หรือคีย์ของ Supabase/Apps Script
+  Secret key ของ Supabase ใช้แค่นับการใส่รหัสผ่านผิด ไม่เคยใช้อ่านหรือเขียนข้อมูลของใคร
+- **Session:** token ของ Supabase อยู่ใน cookie `HttpOnly; Secure; SameSite=Strict` (สคริปต์ในหน้าเว็บอ่านไม่ได้) อยู่ได้ 30 วัน
+  ต่ออายุอัตโนมัติ; ออกจากระบบ = ยกเลิก session ที่ Supabase ด้วย
+- **จำกัดการเดา/สแปม:** ใส่รหัสผ่านผิด 8 ครั้ง (ต่ออีเมลต่อที่อยู่) = รอ 15 นาที; สมัคร / ขอลิงก์ตั้งรหัสใหม่ / ขออีเมลยืนยันซ้ำ
+  ได้อย่างละ 5 ครั้งต่อชั่วโมงต่อที่อยู่ — นับที่ Vercel เพราะ Supabase เห็นทุกคำขอมาจาก Vercel
+- **ไม่บอกว่าใครมีบัญชี:** สมัครด้วยอีเมลที่มีอยู่แล้ว หรือขอลิงก์ตั้งรหัสใหม่ให้อีเมลที่ไม่มี — หน้าเว็บตอบเหมือนกัน
+- **ลิงก์ในอีเมลใช้ได้ครั้งเดียว** และต้องกดปุ่มในหน้าเว็บก่อน (โปรแกรมสแกนลิงก์ในอีเมลจึงใช้แทนไม่ได้)
 - คำสั่งแก้ไขข้อมูลต้องมาจากหน้าเว็บของแอปเอง (ตรวจ `Origin`, `Sec-Fetch-Site`, header `X-Requested-With`)
-- ใส่รหัสผ่านผิด 8 ครั้งจากที่อยู่เดียวกัน = รอ 15 นาที
-- หน้าเว็บมี Content-Security-Policy (รันได้เฉพาะสคริปต์ของแอปเอง) และห้ามฝังใน iframe
-- ข้อความที่ขึ้นต้นด้วย `=` `+` `-` `@` ถูกเก็บเป็นข้อความเสมอ ทั้งใน Sheet และไฟล์ CSV (กันสูตรแฝง)
-- ถ้ารหัสลับหลุด: รัน `rotateSecret` ใน Apps Script แล้วแก้ `APPS_SCRIPT_SECRET` ใน Vercel และ redeploy
+- หน้าเว็บมี Content-Security-Policy (รันได้เฉพาะสคริปต์ของแอป, เชื่อมต่อได้เฉพาะเว็บตัวเอง) และห้ามฝังใน iframe
+- **ลบบัญชีได้เอง** ข้อมูลและไฟล์ทั้งหมดของบัญชีถูกลบทันที
+- ถ้ารหัสลับ Apps Script หลุด: รัน `rotateSecret` แล้วแก้ `APPS_SCRIPT_SECRET` ใน Vercel และ redeploy;
+  ถ้า Secret key ของ Supabase หลุด: สร้างใหม่ใน Project Settings → API Keys แล้วแก้ใน Vercel
 
 ## แก้ปัญหา
 
 | ข้อความ | สาเหตุ / วิธีแก้ |
 |---|---|
 | ยังตั้งค่าไม่ครบ: เพิ่ม … ใน Environment Variables | ใส่ตัวแปรที่ระบุใน Vercel แล้ว **Redeploy** |
-| หลังบ้านตอบกลับผิดรูปแบบ — ตรวจ APPS_SCRIPT_URL … | URL ผิด (ต้องลงท้าย `/exec`) หรือ Who has access ไม่ใช่ "Anyone" |
-| หลังบ้านไม่ยอมรับรหัสลับ | `APPS_SCRIPT_SECRET` ไม่ตรง รัน `showSecret` แล้วคัดลอกใหม่ |
-| ไม่พบแผ่นงาน … / ยังไม่ได้ตั้งค่าหลังบ้าน | รัน `setup` ใน Apps Script |
-| ติดต่อหลังบ้านไม่ได้หรือใช้เวลานานเกินไป | ลองใหม่; ถ้าเป็นบ่อยดูเมนู **Executions** ในหน้า Apps Script |
-| แก้โค้ด Apps Script แล้วไม่เห็นผล | ยังไม่ได้สร้าง **New version** ของ deployment |
-| อ่านยอดใบเสร็จผิด | กดเลือกจาก "ยอดอื่นที่พบ" หรือพิมพ์เอง; ดู "ข้อความที่อ่านได้" ว่า Drive อ่านตัวอักษรออกมาอย่างไร |
-
-## ข้อจำกัดที่ควรรู้
-
-- Google Sheet ไม่มี transaction แบบฐานข้อมูล: แอปตรวจข้อมูลครบก่อนเขียนและล็อกทีละคำสั่ง
-  แต่ถ้า Google ขัดข้องกลางคำสั่งที่เขียนหลายแถว (เช่นบันทึกใบเสร็จหลายใบ) อาจเขียนได้ไม่ครบ
-- เหมาะกับข้อมูลระดับหลักพัน–หมื่นรายการ; ทุกคำสั่งอ่านทั้งแท็บ ยิ่งเยอะยิ่งช้า
-- Apps Script มีโควตารายวันของบัญชี Google (เวลารันรวมและจำนวนครั้งที่เรียก Drive) การใช้งานส่วนตัวปกติไม่ถึง
+| Supabase ไม่ยอมรับ SUPABASE_ANON_KEY | คัดลอก Publishable/anon key ใหม่ (ระวังช่องว่างหัวท้าย) |
+| ตรวจสิทธิ์เข้าสู่ระบบไม่สำเร็จ — ตรวจ SUPABASE_SERVICE_ROLE_KEY | Secret key ผิด หรือยังไม่ได้รัน `0005_auth.sql` |
+| ฐานข้อมูลยังไม่ได้ตั้งค่า — รันไฟล์ใน cloud/supabase/migrations | รัน migration ให้ครบ 6 ไฟล์ตามลำดับ |
+| ติดต่อ Supabase ไม่ได้ | โปรเจกต์ถูกหยุดชั่วคราว (ไม่มีการใช้งาน ~1 สัปดาห์) → Restore project; หรือ `SUPABASE_URL` ผิด |
+| สมัครแล้วไม่ได้อีเมล | ยังไม่ได้ตั้ง Custom SMTP (ขั้นที่ 2 ข้อ 3) หรืออีเมลไปอยู่ในสแปม; ดู **Authentication → Logs** |
+| ลิงก์ในอีเมลพาไปเว็บผิด / localhost | ตั้ง **Site URL** ให้เป็น URL ของ Vercel |
+| ยังไม่ได้ยืนยันอีเมล | เปิดลิงก์ในอีเมล หรือกด "ส่งอีเมลยืนยันอีกครั้ง" ในหน้าเข้าสู่ระบบ |
+| ลิงก์นี้ใช้แล้วหรือหมดอายุ | ลิงก์ใช้ได้ครั้งเดียว ภายใน 1 ชั่วโมง — ขอลิงก์ใหม่ |
+| ระบบบัญชีผู้ใช้ (Supabase) ทำงานไม่สำเร็จ | มักเป็น rate limit ของ Supabase (ขั้นที่ 2 ข้อ 5) ดู **Authentication → Logs** |
+| สแกนแล้วขึ้น "อ่านตัวอักษรจากไฟล์ไม่สำเร็จ" ทุกใบ | ตรวจ `APPS_SCRIPT_URL` (ลงท้าย `/exec`, Who has access = Anyone) และ `APPS_SCRIPT_SECRET`; ดู log ใน Vercel |
+| ยังไม่ได้เพิ่มบริการ Drive API ใน Apps Script | Services → + → Drive API แล้ว deploy เวอร์ชันใหม่ |
+| พื้นที่เก็บใบเสร็จของบัญชีนี้เต็มแล้ว (100 MB) | ลบใบเสร็จหรือรายการเก่าที่มีรูปแนบ |
 
 ## API ภายใน (สำหรับนักพัฒนา)
 
-`POST /api/rpc` รับ `{action, params}` จากหน้าเว็บที่ล็อกอินแล้ว แล้วส่งต่อเป็น `{secret, action, params}` ไปที่ Apps Script
+`POST /api/rpc` รับ `{action, params}` จากหน้าเว็บที่เข้าสู่ระบบแล้ว แต่ละ action คือฟังก์ชัน `public.api_<action>` ใน Postgres
+(เช่น `month.get` → `api_month_get`) เรียกผ่าน PostgREST ด้วย token ของผู้ใช้
 
 | action | ทำอะไร |
 |---|---|
-| `month.get {month}` | ยอดรวม, เทียบเดือนก่อน, ยอดสะสม, แยกหมวด, รายวัน และรายการของเดือน (ครั้งเดียวได้ครบ) |
+| `month.get {month}` | ยอดรวม, เทียบเดือนก่อน, ยอดสะสม, แยกหมวด, รายวัน และรายการของเดือน |
 | `yearly.get {year}` | 12 เดือน + หมวดรายจ่ายสูงสุด |
 | `transactions.create / update / delete / list / import` | รายการ |
-| `categories.list / create / update / delete` | หมวดหมู่ (`update` รับ `budget` ได้: ไม่ส่ง = คงเดิม, `null`/`0` = ไม่มีงบ, เฉพาะหมวดรายจ่าย) |
-| `receipts.upload / list / update / delete / commit` | ใบเสร็จ (ไฟล์ส่งเป็น base64) |
-| `info` | ลิงก์ไป Google Sheet และโฟลเดอร์ใบเสร็จ |
+| `categories.list / create / update / delete` | หมวดหมู่ (`update` รับ `budget`: ไม่ส่ง = คงเดิม, `null`/`0` = ไม่มีงบ, เฉพาะหมวดรายจ่าย) |
+| `receipts.upload / list / update / delete / commit` | ใบเสร็จ (`upload` ส่งไฟล์เป็น base64; Vercel เก็บไฟล์ อ่าน OCR แล้วสร้างร่าง) |
+| `info` | `{version, email}` |
 
-`GET /api/file?id=` ส่งรูป/PDF ใบเสร็จจาก Drive, `POST /api/login`, `POST /api/logout`, `GET /api/session`
+อื่น ๆ: `POST /api/login {email, password}`, `POST /api/logout`, `GET /api/session` → `{authenticated, email}`,
+`POST /api/signup {email, password}`, `POST /api/recover {email}`, `POST /api/resend {email}`,
+`POST /api/verify {token_hash, type}`, `POST /api/password {password}`, `POST /api/account {action: "delete", email}`,
+`GET /api/file?id=` (รูป/PDF ใบเสร็จจาก Storage)

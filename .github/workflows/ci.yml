@@ -49,6 +49,27 @@ jobs:
           node --version
           node --test tests/js/common.test.mjs
 
+  cloud:
+    name: Test the cloud version (Vercel + Supabase)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cloud
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+
+      - name: Install (PGlite, for the tests only)
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
   image:
     name: Build, smoke-test and publish image
     needs: test

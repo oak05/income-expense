@@ -1,7 +1,7 @@
 {
   "name": "income-expense-cloud",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "สมุดรายรับรายจ่าย — Vercel front end for the Apps Script + Google Sheets backend"
+  "description": "สมุดรายรับรายจ่าย — Vercel front end on Supabase (database + auth + storage) with Apps Script OCR"
 }
