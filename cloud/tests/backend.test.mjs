@@ -181,6 +181,42 @@ test("categories: create, duplicate, rename, delete with move", () => {
   assert.equal(b.call("transactions.list", {})[0].id, tx.id);
 });
 
+test("category budgets: set, kept on rename, cleared, expense categories only", () => {
+  const { b, cats } = start();
+  const food = cats["expense:อาหารและเครื่องดื่ม"];
+  const budgetOf = (id) => b.call("categories.list").find((c) => c.id === id).budget;
+  assert.ok(b.call("categories.list").every((c) => c.budget === null));
+
+  assert.equal(b.call("categories.update", { id: food, name: "อาหาร", color: "#E07A3F", budget: "6000" }).budget, 6000);
+  assert.equal(budgetOf(food), 6000);
+  b.call("categories.update", { id: food, name: "อาหารนอกบ้าน", color: "#E07A3F" }); // no budget key: unchanged
+  assert.equal(budgetOf(food), 6000);
+  b.call("categories.update", { id: food, name: "อาหาร", color: "#E07A3F", budget: "1500.505" });
+  assert.equal(budgetOf(food), 1500.51);
+  for (const clear of [null, "", "0"]) {
+    b.call("categories.update", { id: food, name: "อาหาร", color: "#E07A3F", budget: "100" });
+    assert.equal(b.call("categories.update", { id: food, name: "อาหาร", color: "#E07A3F", budget: clear }).budget, null);
+  }
+  rejects(() => b.call("categories.update", { id: cats["income:เงินเดือน"], name: "เงินเดือน", color: "#2F8F5B", budget: "100" }), 400, /รายจ่าย/);
+  for (const bad of ["-5", "abc", "1e3"]) {
+    rejects(() => b.call("categories.update", { id: food, name: "อาหาร", color: "#E07A3F", budget: bad }), 422, /งบประมาณ/);
+  }
+  assert.equal(b.call("categories.create", { name: "สัตว์เลี้ยง", type: "expense", color: "#112233" }).budget, null);
+});
+
+test("a Sheet set up before budgets existed keeps working; re-running setup adds the column header", () => {
+  const { b, cats } = start();
+  const sheet = b.sheet("categories");
+  sheet.rows = sheet.rows.map((r) => r.slice(0, 5)); // the 5-column layout of backend 2.0
+  const food = cats["expense:อาหารและเครื่องดื่ม"];
+  assert.equal(b.call("categories.list").find((c) => c.id === food).budget, null);
+  b.call("categories.update", { id: food, name: "อาหาร", color: "#E07A3F", budget: "900" });
+  assert.equal(b.call("categories.list").find((c) => c.id === food).budget, 900);
+  b.setup();
+  assert.equal(sheet.rows[0][5], "budget");
+  assert.equal(b.call("categories.list").find((c) => c.id === food).budget, 900);
+});
+
 test("the last category of a type cannot be deleted", () => {
   const { b } = start();
   const income = b.call("categories.list").filter((c) => c.type === "income");

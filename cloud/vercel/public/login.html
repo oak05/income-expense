@@ -2,36 +2,36 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F5F9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
   <meta name="robots" content="noindex">
   <title>เข้าสู่ระบบ — สมุดรายรับรายจ่าย</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='3' width='24' height='26' rx='3' fill='%231D2B45'/%3E%3Crect x='9' y='9' width='14' height='2' fill='%23C9A44C'/%3E%3Crect x='9' y='14' width='10' height='2' fill='%23C9A44C'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css?v=2.0.0">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='8' fill='%232F5BEA'/%3E%3Cpath d='M10 20.5l4-4.5 3 3 5-6.5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css?v=2.1.0">
 </head>
 <body class="login-page">
-  <header class="cover">
-    <div class="cover-inner">
-      <span class="brand">สมุดรายรับรายจ่าย</span>
-    </div>
-  </header>
-
   <main class="login-main">
-    <form class="login-card" id="login-form" autocomplete="on">
+    <div class="logo login-logo">
+      <svg class="logo-mark" aria-hidden="true"><use href="/icons.svg#i-logo"/></svg>
+      <span>สมุดรายรับรายจ่าย</span>
+    </div>
+    <form class="card login-card" id="login-form" autocomplete="on">
       <h1>เข้าสู่ระบบ</h1>
-      <p>ใส่รหัสผ่านของแอป (ค่า APP_PASSWORD ที่ตั้งไว้ใน Vercel)</p>
+      <p class="login-sub">ใส่รหัสผ่านของแอป (ค่า APP_PASSWORD ที่ตั้งไว้ใน Vercel)</p>
       <!-- a user-name field lets password managers save and fill the password -->
       <input type="text" name="username" value="owner" autocomplete="username" hidden>
-      <label class="field">
-        <span class="field-label">รหัสผ่าน</span>
-        <input type="password" id="password" name="password" autocomplete="current-password" required autofocus>
-      </label>
+      <div class="field">
+        <label class="field-label" for="password">รหัสผ่าน</label>
+        <input class="input" type="password" id="password" name="password" autocomplete="current-password" required autofocus>
+      </div>
       <p class="form-error" id="login-error" role="alert" hidden></p>
-      <button class="primary-btn" type="submit" id="login-btn">เข้าสู่ระบบ</button>
+      <button class="btn btn-primary btn-block" type="submit" id="login-btn">เข้าสู่ระบบ</button>
     </form>
   </main>
 
-  <script src="/common.js?v=2.0.0"></script>
-  <script src="/login.js?v=2.0.0"></script>
+  <script src="/common.js?v=2.1.0"></script>
+  <script src="/login.js?v=2.1.0"></script>
 </body>
 </html>

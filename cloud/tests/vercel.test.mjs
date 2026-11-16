@@ -207,7 +207,7 @@ test("requests over the size limit are refused", async () => {
 /* ---------- static pages ---------- */
 
 test("pages are served with the security headers from vercel.json", async () => {
-  for (const path of ["/", "/login.html", "/receipts.html", "/app.js", "/csv.js", "/vendor/chart.umd.min.js"]) {
+  for (const path of ["/", "/login.html", "/receipts.html", "/app.js", "/csv.js", "/icons.svg", "/vendor/chart.umd.min.js"]) {
     const res = await fetch(base + path);
     assert.equal(res.status, 200, path);
     assert.match(res.headers.get("content-security-policy"), /default-src 'self'/);

@@ -17,7 +17,7 @@ const VERCEL_DIR = fileURLToPath(new URL("../vercel/", import.meta.url));
 const PUBLIC_DIR = join(VERCEL_DIR, "public");
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8",
-  ".woff2": "font/woff2", ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".txt": "text/plain; charset=utf-8",
+  ".woff2": "font/woff2", ".svg": "image/svg+xml", ".json": "application/json", ".md": "text/markdown; charset=utf-8", ".txt": "text/plain; charset=utf-8",
 };
 const SAMPLE_OCR = [
   "7-ELEVEN\nบริษัท ซีพี ออลล์ จำกัด (มหาชน)\nโออิชิ กรีนที 20.00\nข้าวกะเพราไก่ 45.00\nรวม 2 ชิ้น 65.00\nเงินสด 100.00\nทอน 35.00",

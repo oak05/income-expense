@@ -8,18 +8,18 @@
  * First-time use: run setup() once from the editor, then deploy as a web app (see cloud/README.md).
  */
 
-const BACKEND_VERSION = '2.0.0';
+const BACKEND_VERSION = '2.1.0';
 const SCHEMA_VERSION = 1;
 
 const TABLES = {
-  categories: ['id', 'name', 'type', 'color', 'sort_order'],
+  categories: ['id', 'name', 'type', 'color', 'sort_order', 'budget'], // budget: baht per month, empty = none
   transactions: ['id', 'type', 'amount', 'category_id', 'date', 'note', 'receipt_id', 'created_at', 'updated_at'],
   receipts: ['id', 'status', 'merchant', 'amount', 'date', 'category_id', 'included', 'transaction_id', 'file_id',
     'mime', 'original_name', 'text_source', 'confidence', 'candidates', 'flags', 'error', 'ocr_text', 'created_at'],
   meta: ['key', 'value'],
 };
 const INT_COLUMNS = { id: 1, category_id: 1, sort_order: 1, transaction_id: 1, receipt_id: 1 };
-const NUMBER_COLUMNS = { amount: 1 };
+const NUMBER_COLUMNS = { amount: 1, budget: 1 };
 const BOOL_COLUMNS = { included: 1 };
 // every other column is text and is stored in cells formatted as plain text, so Sheets never
 // turns "2026-11-10" into a date, "007" into 7 or "=A1" into a formula
@@ -164,6 +164,19 @@ function vColor_(v) {
   return String(v);
 }
 
+/** Monthly budget: null, '' or 0 = no budget (null); otherwise a positive amount in satang. */
+function vBudget_(v) {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
+  const s = toSatang_(v);
+  if (!(s >= 0) || s > MAX_SATANG) fail_(422, 'ข้อมูลไม่ถูกต้อง: งบประมาณ');
+  return s || null;
+}
+
+function budgetOut_(cell) {
+  const s = satangOf_(cell);
+  return s > 0 ? baht_(s) : null;
+}
+
 function shiftMonth_(month, delta) {
   const idx = Number(month.slice(0, 4)) * 12 + Number(month.slice(5, 7)) - 1 + delta;
   const m = idx % 12 + 1;
@@ -272,7 +285,10 @@ function a_categoriesList_() {
   return table_('categories').all()
     .sort(function (a, b) { return a.sort_order - b.sort_order || a.id - b.id; })
     .map(function (c) {
-      return { id: c.id, name: c.name, type: c.type, color: c.color, sort_order: c.sort_order, tx_count: counts[c.id] || 0 };
+      return {
+        id: c.id, name: c.name, type: c.type, color: c.color, sort_order: c.sort_order,
+        budget: budgetOut_(c.budget), tx_count: counts[c.id] || 0,
+      };
     });
 }
 
@@ -284,7 +300,7 @@ function a_categoriesCreate_(p) {
   const order = rows.reduce(function (m, c) { return Math.max(m, c.sort_order || 0); }, 0) + 1;
   const row = { id: nextIds_('categories', 1)[0], name: name, type: type, color: color, sort_order: order };
   cats.append([row]);
-  return { id: row.id, name: name, type: type, color: color, sort_order: order, tx_count: 0 };
+  return { id: row.id, name: name, type: type, color: color, sort_order: order, budget: null, tx_count: 0 };
 }
 
 function a_categoriesUpdate_(p) {
@@ -298,8 +314,13 @@ function a_categoriesUpdate_(p) {
   }
   row.name = name;
   row.color = color;
+  if ('budget' in p) { // left out = unchanged, so a rename never clears a budget
+    const budget = vBudget_(p.budget);
+    if (budget && row.type !== 'expense') fail_(400, 'ตั้งงบประมาณได้เฉพาะหมวดรายจ่าย ไม่ใช่หมวดรายรับ');
+    row.budget = budget ? baht_(budget) : null;
+  }
   cats.update(row);
-  return { id: id, name: name, type: row.type, color: color, sort_order: row.sort_order };
+  return { id: id, name: name, type: row.type, color: color, sort_order: row.sort_order, budget: budgetOut_(row.budget) };
 }
 
 function a_categoriesDelete_(p) {
