@@ -1,6 +1,6 @@
 // Local stand-in for the whole cloud setup, with no Supabase, Google or Vercel account needed:
 //   - "Supabase": dev/fake-supabase.mjs over PGlite with the real migrations in cloud/supabase/migrations
-//   - "Apps Script OCR": a fake web app that returns sample receipt texts
+//   - "Apps Script OCR": the real Ocr.gs on fake Google services, whose "Drive OCR" returns sample receipt texts
 //   - "Vercel": the real functions from cloud/vercel/api and the static files from cloud/vercel/public
 //
 //   node cloud/dev/server.mjs            -> http://localhost:3000  (dev@example.com / dev-password)
@@ -14,6 +14,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createDb, createUser } from "./pg.mjs";
 import { startFakeSupabase } from "./fake-supabase.mjs";
+import { loadOcr } from "./fake-google.mjs";
 
 const VERCEL_DIR = fileURLToPath(new URL("../vercel/", import.meta.url));
 const PUBLIC_DIR = join(VERCEL_DIR, "public");
@@ -44,24 +45,20 @@ function readBody(req) {
 }
 
 /**
- * The fake OCR web app (Apps Script): POST {secret, mime, data} -> {ok, data: {text}}.
- * Like the real one, a POST is answered with a redirect to the JSON.
+ * The OCR web app: the real Ocr.gs on the fake Google services. Like the real deployment, a POST is answered with
+ * a redirect to the JSON. `ocr()` plays Drive OCR: it returns the text, or throws to act like a Drive failure.
  */
-async function startOcrServer({ secret, ocr }, port = 0) {
+async function startOcrServer(ocr, port = 0) {
+  const backend = loadOcr({ ocr });
+  backend.setup();
   const responses = new Map();
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");
     if (req.method === "POST" && url.pathname === "/macros/s/FAKE/exec") {
-      let out;
-      try {
-        const body = JSON.parse((await readBody(req)).toString("utf8"));
-        if (body.secret !== secret) out = { ok: false, status: 401, error: "unauthorized" };
-        else out = { ok: true, data: { text: String(await ocr({ mime: body.mime, data: body.data })) } };
-      } catch (err) {
-        out = { ok: false, status: err?.status || 500, error: String(err?.message || err) };
-      }
+      const body = (await readBody(req)).toString("utf8");
+      const out = backend.gs.doPost({ postData: { contents: body, type: req.headers["content-type"] } });
       const id = randomUUID();
-      responses.set(id, JSON.stringify(out));
+      responses.set(id, out.getContent());
       res.writeHead(302, { location: `/macros/echo?id=${id}` }).end();
     } else if (req.method === "GET" && url.pathname === "/macros/echo" && responses.has(url.searchParams.get("id"))) {
       const text = responses.get(url.searchParams.get("id"));
@@ -72,7 +69,7 @@ async function startOcrServer({ secret, ocr }, port = 0) {
     }
   });
   const actualPort = await listen(server, port);
-  return { server, url: `http://127.0.0.1:${actualPort}/macros/s/FAKE/exec` };
+  return { server, backend, secret: backend.secret, url: `http://127.0.0.1:${actualPort}/macros/s/FAKE/exec` };
 }
 
 function staticHeaders(pathname) {
@@ -153,14 +150,13 @@ export async function startDev({ port = 3000, ocr, accessTtlSeconds = 3600, log 
   const db = await createDb();
   for (const u of Object.values(DEV_USERS)) await createUser(db, u);
   const supabase = await startFakeSupabase({ db, accessTtlSeconds, log });
-  const ocrSecret = "dev-ocr-secret-0123456789abcdef";
-  const ocrServer = await startOcrServer({ secret: ocrSecret, ocr: ocr || (() => SAMPLE_OCR[n++ % SAMPLE_OCR.length]) });
+  const ocrServer = await startOcrServer(ocr || (() => SAMPLE_OCR[n++ % SAMPLE_OCR.length]));
   Object.assign(process.env, {
     SUPABASE_URL: supabase.url,
     SUPABASE_ANON_KEY: supabase.anonKey,
     SUPABASE_SERVICE_ROLE_KEY: supabase.serviceKey,
     APPS_SCRIPT_URL: ocrServer.url,
-    APPS_SCRIPT_SECRET: ocrSecret,
+    APPS_SCRIPT_SECRET: ocrServer.secret,
   });
   const app = await startAppServer(port);
   supabase.siteUrl = app.url;
