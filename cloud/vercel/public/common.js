@@ -40,6 +40,7 @@ async function apiPost(path, body) {
       || (res.status === 413 ? "ไฟล์หรือข้อมูลใหญ่เกินไป" : `เกิดข้อผิดพลาด (รหัส ${res.status})`);
     const err = new Error(msg);
     err.status = res.status;
+    err.code = data && typeof data.code === "string" ? data.code : undefined; // e.g. "email_not_confirmed"
     throw err;
   }
   return data;

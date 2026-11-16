@@ -1,0 +1,8 @@
+<!-- Supabase → Authentication → Emails → "Confirm signup"
+     Subject: ยืนยันอีเมล — สมุดรายรับรายจ่าย
+     The link goes to the app's own confirm.html (not straight to Supabase), which asks for one click first. -->
+<h2>ยืนยันอีเมลของคุณ</h2>
+<p>มีการสมัครใช้ <strong>สมุดรายรับรายจ่าย</strong> ด้วยอีเมล {{ .Email }}</p>
+<p>กดลิงก์ด้านล่าง แล้วกดปุ่ม "ยืนยันอีเมล" ในหน้าที่เปิดขึ้น เพื่อเริ่มใช้งาน</p>
+<p><a href="{{ .SiteURL }}/confirm.html?token_hash={{ .TokenHash }}&type=email">ยืนยันอีเมล</a></p>
+<p>ลิงก์ใช้ได้ครั้งเดียว ถ้าคุณไม่ได้สมัคร ไม่ต้องทำอะไร — บัญชีจะไม่ถูกเปิดใช้</p>

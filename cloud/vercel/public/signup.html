@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F5F9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex">
+  <title>สมัครสมาชิก — สมุดรายรับรายจ่าย</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='8' fill='%232F5BEA'/%3E%3Cpath d='M10 20.5l4-4.5 3 3 5-6.5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css?v=3.0.0">
+</head>
+<body class="login-page">
+  <main class="login-main">
+    <div class="logo login-logo">
+      <svg class="logo-mark" aria-hidden="true"><use href="/icons.svg#i-logo"/></svg>
+      <span>สมุดรายรับรายจ่าย</span>
+    </div>
+    <form class="card login-card" id="signup-form" autocomplete="on">
+      <h1>สมัครสมาชิก</h1>
+      <p class="login-sub">แต่ละบัญชีมีสมุดของตัวเอง คนอื่นมองไม่เห็น</p>
+      <div class="field">
+        <label class="field-label" for="email">อีเมล</label>
+        <input class="input" type="email" id="email" name="email" autocomplete="email" inputmode="email" required autofocus>
+      </div>
+      <div class="field">
+        <label class="field-label" for="password">รหัสผ่าน <span class="optional">(อย่างน้อย 8 ตัวอักษร)</span></label>
+        <input class="input" type="password" id="password" name="password" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="field">
+        <label class="field-label" for="password2">ใส่รหัสผ่านอีกครั้ง</label>
+        <input class="input" type="password" id="password2" name="password2" autocomplete="new-password" minlength="8" required>
+      </div>
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" type="submit" id="submit-btn">สมัครสมาชิก</button>
+      <p class="login-links"><span>มีบัญชีแล้ว?</span><a href="/login.html">เข้าสู่ระบบ</a></p>
+    </form>
+    <section class="card login-card" id="done" hidden>
+      <h1>ตรวจอีเมลของคุณ</h1>
+      <p>เราส่งลิงก์ยืนยันไปที่ <strong id="done-email"></strong> แล้ว เปิดลิงก์ในอีเมลเพื่อเริ่มใช้งาน</p>
+      <p class="login-sub">ไม่เห็นอีเมล? ดูในโฟลเดอร์สแปม หรือ <a href="/login.html">เข้าสู่ระบบ</a> แล้วกดส่งอีเมลยืนยันอีกครั้ง</p>
+    </section>
+  </main>
+
+  <script src="/common.js?v=3.0.0"></script>
+  <script src="/signup.js?v=3.0.0"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F5F9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex">
+  <title>ยืนยัน — สมุดรายรับรายจ่าย</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='8' fill='%232F5BEA'/%3E%3Cpath d='M10 20.5l4-4.5 3 3 5-6.5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css?v=3.0.0">
+</head>
+<body class="login-page">
+  <main class="login-main">
+    <div class="logo login-logo">
+      <svg class="logo-mark" aria-hidden="true"><use href="/icons.svg#i-logo"/></svg>
+      <span>สมุดรายรับรายจ่าย</span>
+    </div>
+    <section class="card login-card" id="confirm-card">
+      <h1 id="confirm-title">ยืนยันอีเมล</h1>
+      <p class="login-sub" id="confirm-sub">กดปุ่มด้านล่างเพื่อยืนยันอีเมลและเข้าสู่ระบบ</p>
+      <p class="form-error" id="form-error" role="alert" hidden></p>
+      <button class="btn btn-primary btn-block" type="button" id="confirm-btn">ยืนยันอีเมล</button>
+      <p class="login-links" id="expired-links" hidden><a href="/forgot.html">ขอลิงก์ตั้งรหัสผ่านใหม่</a><a href="/login.html">เข้าสู่ระบบ</a></p>
+    </section>
+  </main>
+
+  <script src="/common.js?v=3.0.0"></script>
+  <script src="/confirm.js?v=3.0.0"></script>
+</body>
+</html>
