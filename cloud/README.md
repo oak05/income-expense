@@ -83,6 +83,8 @@ npm run dev        # เปิด http://localhost:3000
    ถ้าขึ้นว่า "Google hasn't verified this app" ให้กด Advanced → Go to … เพราะเป็นสคริปต์ของคุณเอง)
 5. ดู **Execution log** จะมีบรรทัด `APPS_SCRIPT_SECRET (ใส่ใน Vercel): …` — คัดลอกไว้ (ดูอีกครั้งได้ด้วย `showSecret`)
 6. **Deploy → New deployment** → ประเภท **Web app**, Execute as **Me**, Who has access **Anyone** → Deploy → คัดลอก **Web app URL** (ลงท้าย `/exec`)
+7. ทดสอบ: เลือกฟังก์ชัน **`testOcr`** → **Run** ต้องขึ้น `อ่านใบเสร็จได้ปกติ` (ถ้า Google ขอสิทธิ์ Drive ให้กดอนุญาต แล้วรันอีกครั้ง)
+   — แก้โค้ดภายหลังให้ใช้ **Deploy → Manage deployments → ✏️ → Version: New version** (URL เดิม ไม่ต้องแก้ Vercel)
 
 สคริปต์นี้ไม่มีข้อมูลของใคร: รับไฟล์ อ่านตัวอักษร แล้วลบไฟล์ชั่วคราวทันที ทุกคำขอต้องมีรหัสลับ
 
@@ -179,6 +181,7 @@ Google Sheet เดิมไม่ถูกลบ เก็บไว้เป็
 | ระบบบัญชีผู้ใช้ (Supabase) ทำงานไม่สำเร็จ | มักเป็น rate limit ของ Supabase (ขั้นที่ 2 ข้อ 5) ดู **Authentication → Logs** |
 | สแกนแล้วขึ้น "อ่านตัวอักษรจากไฟล์ไม่สำเร็จ" ทุกใบ | ตรวจ `APPS_SCRIPT_URL` (ลงท้าย `/exec`, Who has access = Anyone) และ `APPS_SCRIPT_SECRET`; ดู log ใน Vercel |
 | ยังไม่ได้เพิ่มบริการ Drive API ใน Apps Script | Services → + → Drive API แล้ว deploy เวอร์ชันใหม่ |
+| อ่านตัวอักษรจากไฟล์ไม่สำเร็จ ใส่ยอดเองได้ (ทุกใบ) | รัน `testOcr` ใน Apps Script จะเห็นสาเหตุจริง (มักเป็นยังไม่ได้อนุญาตสิทธิ์ Drive); สาเหตุยังอยู่ใน Vercel → Logs บรรทัด `ocr failed in Apps Script` |
 | พื้นที่เก็บใบเสร็จของบัญชีนี้เต็มแล้ว (100 MB) | ลบใบเสร็จหรือรายการเก่าที่มีรูปแนบ |
 
 ## API ภายใน (สำหรับนักพัฒนา)

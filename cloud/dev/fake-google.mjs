@@ -42,7 +42,7 @@ export function createFakeGoogle(opts = {}) {
         if (!/^[A-Za-z0-9+/]*={0,2}$/.test(s)) throw new Error("Could not decode string.");
         return signed(Buffer.from(s, "base64"));
       },
-      newBlob: (bytes, mime, name) => blobOf(bytes, mime, name),
+      newBlob: (bytes, mime, name) => blobOf(typeof bytes === "string" ? signed(Buffer.from(bytes, "utf8")) : bytes, mime, name),
       computeDigest: (_algo, text) => signed(createHash("sha256").update(String(text), "utf8").digest()),
     },
     Drive: {
@@ -78,7 +78,7 @@ export function loadOcr(opts = {}) {
   const fake = createFakeGoogle(opts);
   const context = vm.createContext({ ...fake.globals });
   const source = readFileSync(new URL("../apps-script/Ocr.gs", import.meta.url), "utf8");
-  vm.runInContext(source + "\n;globalThis.__gs = { doPost, doGet, setup, showSecret, rotateSecret };", context, { filename: "Ocr.gs" });
+  vm.runInContext(source + "\n;globalThis.__gs = { doPost, doGet, setup, showSecret, rotateSecret, testOcr };", context, { filename: "Ocr.gs" });
   const gs = context.__gs;
   const ocr = {
     ...fake,

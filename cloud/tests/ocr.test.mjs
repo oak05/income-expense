@@ -2,7 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { loadOcr } from "../dev/fake-google.mjs";
+import { ocrText } from "../vercel/lib/ocr.js";
 
 const JPEG = readFileSync(new URL("../../tests/fixtures/receipt-restaurant.jpg", import.meta.url));
 const TEXT = "7-ELEVEN\nรวม 2 ชิ้น 125.00";
@@ -31,7 +33,7 @@ test("requests without the right secret get nothing", () => {
   }
   assert.equal(JSON.parse(o.gs.doPost({ postData: { contents: "not json" } }).getContent()).status, 400);
   assert.equal(JSON.parse(o.gs.doPost({}).getContent()).status, 400);
-  assert.match(o.gs.doGet().getContent(), /^income-expense ocr 3\.0\.0/);
+  assert.match(o.gs.doGet().getContent(), /^income-expense ocr 3\.0\.1/);
 });
 
 test("returns the OCR text and leaves no file behind", () => {
@@ -67,6 +69,43 @@ test("a Drive failure is a 502, not a crash", () => {
   const r = req(o);
   assert.equal(r.status, 502);
   assert.equal(o.state.docs.size, 0);
+  assert.match(r.detail, /OCR backend error/, "the cause goes back to Vercel's logs");
+});
+
+test("testOcr (run from the editor) reads a built-in test receipt and leaves nothing behind", () => {
+  let seen;
+  const o = loadOcr({ ocr: (bytes, mime) => { seen = { bytes, mime }; return bytes.toString("latin1").includes("TOTAL 125.00") ? "TEST SHOP\nTOTAL 125.00" : ""; } });
+  assert.match(o.gs.testOcr(), /125\.00/);
+  assert.equal(seen.mime, "application/pdf");
+  assert.equal(seen.bytes.subarray(0, 5).toString(), "%PDF-");
+  assert.equal(o.state.docs.size, 0);
+});
+
+test("testOcr shows the exact Drive error in the editor", () => {
+  const o = loadOcr();
+  o.state.ocrFails = true;
+  assert.throws(() => o.gs.testOcr(), /OCR backend error/);
+  delete o.context.Drive;
+  assert.throws(() => o.gs.testOcr(), /Drive API/);
+});
+
+test("Vercel logs the cause Apps Script sends with a failure", async () => {
+  const server = createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: false, status: 502, error: "อ่านตัวอักษรจากไฟล์ไม่สำเร็จ ใส่ยอดเองได้", detail: "Exception: no permission for Drive" }));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (...a) => warned.push(a.join(" "));
+  try {
+    await assert.rejects(ocrText(Buffer.from("x"), "image/jpeg", { ocrUrl: `http://127.0.0.1:${server.address().port}/`, ocrSecret: "s" }),
+      (err) => err.status === 502 && /อ่านตัวอักษร/.test(err.message) && !/permission/.test(err.message));
+  } finally {
+    console.warn = warn;
+    server.close();
+  }
+  assert.ok(warned.some((w) => w.includes("no permission for Drive")), warned.join(" | "));
 });
 
 test("oversized or unknown files are refused", () => {

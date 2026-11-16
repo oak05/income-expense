@@ -8,17 +8,19 @@
  * First-time use: add the Drive API service, run setup() once, deploy as a web app (see cloud/README.md).
  */
 
-const OCR_VERSION = '3.0.0';
+const OCR_VERSION = '3.0.1';
 const MAX_RECEIPT_BYTES = 2.5 * 1024 * 1024; // Drive OCR works best under ~2 MB; the browser shrinks photos first
 const RECEIPT_MIMES = { 'image/jpeg': 1, 'image/png': 1, 'application/pdf': 1 };
 
-function ApiError(status, message) {
+function ApiError(status, message, detail) {
   this.status = status;
   this.message = message;
+  this.detail = detail;
 }
 
-function fail_(status, message) {
-  throw new ApiError(status, message);
+/** detail: the underlying cause, sent back for Vercel's logs only (the page shows message). */
+function fail_(status, message, detail) {
+  throw new ApiError(status, message, detail);
 }
 
 function props_() {
@@ -56,16 +58,16 @@ function read_(params) {
   }
   if (!bytes.length) fail_(400, 'ไม่มีไฟล์');
   if (bytes.length > MAX_RECEIPT_BYTES) fail_(413, 'ไฟล์ใหญ่เกิน 2.5 MB');
-  if (typeof Drive === 'undefined') {
-    fail_(503, 'ยังไม่ได้เพิ่มบริการ Drive API ใน Apps Script (Services → + → Drive API) จึงอ่านตัวอักษรไม่ได้ ใส่ยอดเองได้');
-  }
+  if (typeof Drive === 'undefined') fail_(503, NO_DRIVE);
   try {
     return { text: ocrText_(Utilities.newBlob(bytes, mime, 'receipt')) || '' };
   } catch (e) {
     console.warn('OCR failed: ' + e);
-    fail_(502, 'อ่านตัวอักษรจากไฟล์ไม่สำเร็จ ใส่ยอดเองได้');
+    fail_(502, 'อ่านตัวอักษรจากไฟล์ไม่สำเร็จ ใส่ยอดเองได้', String(e).slice(0, 500));
   }
 }
+
+const NO_DRIVE = 'ยังไม่ได้เพิ่มบริการ Drive API ใน Apps Script (Services → + → Drive API) จึงอ่านตัวอักษรไม่ได้ ใส่ยอดเองได้';
 
 function secretOk_(given) {
   const want = props_().getProperty('API_SECRET');
@@ -96,6 +98,7 @@ function doPost(e) {
   } catch (err) {
     if (err instanceof ApiError) {
       out = { ok: false, status: err.status, error: err.message };
+      if (err.detail) out.detail = err.detail;
     } else {
       console.error(err && err.stack ? err.stack : err);
       out = { ok: false, status: 500, error: 'เกิดข้อผิดพลาดที่ Apps Script: ' + (err && err.message ? err.message : err) };
@@ -129,4 +132,40 @@ function showSecret() {
 function rotateSecret() {
   props_().setProperty('API_SECRET', (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, ''));
   showSecret();
+}
+
+/**
+ * Run from the editor to check receipt reading: reads a small built-in test receipt exactly the way doPost does and
+ * shows the text, or the exact error from Google Drive. The first run also asks for any permission still missing.
+ */
+function testOcr() {
+  if (typeof Drive === 'undefined') throw new Error(NO_DRIVE);
+  const text = ocrText_(Utilities.newBlob(testPdf_(), 'application/pdf', 'ocr-test.pdf'));
+  Logger.log('อ่านได้: ' + JSON.stringify(text));
+  if (!/125/.test(text)) throw new Error('อ่านไฟล์ทดสอบได้ไม่ครบ: ' + JSON.stringify(text));
+  Logger.log('อ่านใบเสร็จได้ปกติ');
+  return text;
+}
+
+/** A one-page PDF with the text "TEST SHOP / TOTAL 125.00" (plain ASCII, so characters = bytes). */
+function testPdf_() {
+  const stream = 'BT /F1 24 Tf 72 700 Td (TEST SHOP) Tj 0 -40 Td (TOTAL 125.00) Tj ET';
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    '<< /Length ' + stream.length + ' >>\nstream\n' + stream + '\nendstream',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let out = '%PDF-1.4\n';
+  const offsets = [];
+  objs.forEach(function (o, i) {
+    offsets.push(out.length);
+    out += (i + 1) + ' 0 obj\n' + o + '\nendobj\n';
+  });
+  const xref = out.length;
+  out += 'xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n';
+  offsets.forEach(function (o) { out += ('0000000000' + o).slice(-10) + ' 00000 n \n'; });
+  out += 'trailer\n<< /Size ' + (objs.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n';
+  return out;
 }

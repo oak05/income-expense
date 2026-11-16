@@ -33,6 +33,7 @@ export async function ocrText(bytes, mime, cfg = config()) {
     console.error("ocr refused the secret");
     throw new HttpError(502, "Apps Script ไม่ยอมรับรหัสลับ — ตรวจว่า APPS_SCRIPT_SECRET ใน Vercel ตรงกับที่ setup() แสดง");
   }
+  if (body?.detail) console.warn("ocr failed in Apps Script:", String(body.detail).slice(0, 500)); // for the logs only
   const status = Number(body?.status);
   throw new HttpError(status >= 400 && status <= 599 ? status : 502, String(body?.error || "อ่านใบเสร็จไม่สำเร็จ"));
 }
