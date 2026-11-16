@@ -3,6 +3,8 @@
  * Where the links in our emails land (?token_hash=…&type=email|recovery).
  * Nothing happens until the button is pressed: mail scanners that open every link would otherwise use up the
  * one-time token, and cookies set during the arrival from a mail app would not be sent on the next page.
+ * Afterwards the page says which account is now signed in, so a link someone else sent can't quietly put you
+ * into their account.
  */
 
 const params = new URLSearchParams(location.search);
@@ -29,7 +31,12 @@ btn.addEventListener("click", async () => {
   $("#form-error").hidden = true;
   try {
     const r = await apiPost("/api/verify", { token_hash: tokenHash, type });
-    location.replace(r.next || "/");
+    $("#confirm-title").textContent = type === "recovery" ? "ยืนยันตัวตนแล้ว" : "ยืนยันอีเมลแล้ว";
+    $("#confirm-sub").hidden = true;
+    $("#signed-in-email").textContent = r.email || "";
+    $("#signed-in").hidden = false;
+    $("#continue-link").href = r.next || "/";
+    btn.hidden = true;
   } catch (err) {
     if (err.code === "link_expired") return expired(err.message);
     $("#form-error").textContent = err.message;

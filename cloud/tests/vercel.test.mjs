@@ -131,6 +131,19 @@ test("logout clears both cookies and the old refresh token stops working", async
   assert.equal((await rpc(refreshOnly, "categories.list")).status, 401);
 });
 
+test("logout signs out this browser only, also after an idle hour", async () => {
+  const phone = await session();
+  const laptop = await session();
+  const refreshOf = (c) => /sb_refresh=[^;]+/.exec(c)[0];
+  assert.equal((await post("/api/logout", {}, { cookie: phone.cookie })).status, 200);
+  assert.equal((await rpc(refreshOf(phone.cookie), "categories.list")).status, 401, "the phone's session is ended");
+  assert.equal((await rpc(refreshOf(laptop.cookie), "categories.list")).status, 200, "the laptop stays signed in");
+
+  const idle = await session(); // access cookie gone (expired), only the refresh cookie left
+  assert.equal((await post("/api/logout", {}, { cookie: refreshOf(idle.cookie) })).status, 200);
+  assert.equal((await rpc(refreshOf(idle.cookie), "categories.list")).status, 401, "revoked even without an access token");
+});
+
 test("eight wrong passwords block that email from that address, even with the right password", async () => {
   await clearThrottle();
   await createUser(dev.db, { email: "throttle@example.com", password: "right-password" });

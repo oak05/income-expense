@@ -22,6 +22,12 @@
       <p class="login-sub" id="confirm-sub">กดปุ่มด้านล่างเพื่อยืนยันอีเมลและเข้าสู่ระบบ</p>
       <p class="form-error" id="form-error" role="alert" hidden></p>
       <button class="btn btn-primary btn-block" type="button" id="confirm-btn">ยืนยันอีเมล</button>
+      <div id="signed-in" hidden>
+        <p class="form-ok">เข้าสู่ระบบเป็น <strong id="signed-in-email"></strong></p>
+        <p class="login-sub">ถ้านี่ไม่ใช่อีเมลของคุณ อย่าใช้ต่อ — กดออกจากระบบ</p>
+        <a class="btn btn-primary btn-block" id="continue-link" href="/">ไปต่อ</a>
+        <button class="btn btn-secondary btn-block" type="button" data-logout>ไม่ใช่บัญชีของฉัน — ออกจากระบบ</button>
+      </div>
       <p class="login-links" id="expired-links" hidden><a href="/forgot.html">ขอลิงก์ตั้งรหัสผ่านใหม่</a><a href="/login.html">เข้าสู่ระบบ</a></p>
     </section>
   </main>

@@ -18,5 +18,7 @@ export const POST = handler(async (request) => {
     throw new HttpError(410, "ลิงก์นี้ใช้แล้วหรือหมดอายุ — ขอลิงก์ใหม่", "link_expired");
   }
   const session = await verify(type, tokenHash, cfg);
-  return json({ ok: true, next: NEXT[type] }, 200, { "set-cookie": sessionCookies(session) });
+  // the page shows whose account this is before going on, so a link someone else sent can't quietly sign you
+  // into their account
+  return json({ ok: true, next: NEXT[type], email: session.user.email }, 200, { "set-cookie": sessionCookies(session) });
 });

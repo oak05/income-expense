@@ -16,6 +16,7 @@ export function setFakeNow(ms) {
 const now = () => fakeNow ?? Date.now();
 
 const REUSE_INTERVAL_MS = 10_000;
+const EMAIL_INTERVAL_MS = 60_000; // Supabase's default minimum interval between emails to one address
 const LINK_TTL_MS = 3600_000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -38,14 +39,15 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
   const links = new Map(); // token_hash -> {type, userId, expires}
   const objects = new Map(); // "<path>" -> {bytes, mime}
   const mailbox = [];
+  const lastMailAt = new Map(); // userId -> ms
   let failUpload = false;
 
   /* ---------- tokens ---------- */
 
-  function signJwt(user) {
+  function signJwt(user, sessionId) {
     const head = b64url({ alg: "HS256", typ: "JWT" });
     const exp = Math.floor(now() / 1000) + accessTtlSeconds;
-    const body = b64url({ sub: user.id, email: user.email, role: "authenticated", aud: "authenticated", exp });
+    const body = b64url({ sub: user.id, email: user.email, role: "authenticated", aud: "authenticated", exp, session_id: sessionId });
     const sig = createHmac("sha256", jwtSecret).update(`${head}.${body}`).digest("base64url");
     return { token: `${head}.${body}.${sig}`, exp };
   }
@@ -65,10 +67,10 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
     return claims.exp * 1000 > now() ? claims : null;
   }
 
-  function session(user) {
-    const { token, exp } = signJwt(user);
+  function session(user, sessionId = randomBytes(8).toString("hex")) {
+    const { token, exp } = signJwt(user, sessionId);
     const refresh = randomBytes(24).toString("hex");
-    refreshTokens.set(refresh, { userId: user.id, usedAt: null, child: null });
+    refreshTokens.set(refresh, { userId: user.id, sessionId, usedAt: null, child: null });
     return {
       access_token: token, token_type: "bearer", expires_in: accessTtlSeconds, expires_at: exp,
       refresh_token: refresh, user: { id: user.id, email: user.email },
@@ -82,13 +84,18 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
   const userById = async (id) =>
     (await db.query("select id, email, encrypted_password, email_confirmed_at from auth.users where id = $1", [id])).rows[0];
 
+  /** Sends a link, or returns false when the previous email to this user was under a minute ago (Supabase: 429). */
   function mail(to, type, userId) {
+    if (now() - (lastMailAt.get(userId) ?? -Infinity) < EMAIL_INTERVAL_MS) return false;
+    lastMailAt.set(userId, now());
     const tokenHash = randomBytes(20).toString("hex");
     links.set(tokenHash, { type, userId, expires: now() + LINK_TTL_MS });
     const link = `${api.siteUrl}/confirm.html?token_hash=${tokenHash}&type=${type}`;
     mailbox.push({ to, type, link });
     if (log) console.log(`\n  [อีเมลจำลอง] ถึง ${to} (${type === "email" ? "ยืนยันอีเมล" : "ตั้งรหัสผ่านใหม่"}):\n  ${link}\n`);
+    return true;
   }
+  const tooSoon = (res) => authErr(res, 429, "over_email_send_rate_limit", "For security purposes, you can only request this after 60 seconds.");
 
   /* ---------- HTTP ---------- */
 
@@ -123,11 +130,11 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
           if (now() - rt.usedAt > REUSE_INTERVAL_MS) {
             return authErr(res, 400, "refresh_token_already_used", "Invalid Refresh Token: Already Used");
           }
-          const { token, exp } = signJwt(user); // inside the reuse window: hand out the same child token again
+          const { token, exp } = signJwt(user, rt.sessionId); // inside the reuse window: the same child token again
           return send(res, 200, { access_token: token, token_type: "bearer", expires_in: accessTtlSeconds, expires_at: exp,
             refresh_token: rt.child, user: { id: user.id, email: user.email } });
         }
-        const s = session(user);
+        const s = session(user, rt.sessionId);
         rt.usedAt = now();
         rt.child = s.refresh_token;
         return send(res, 200, s);
@@ -137,7 +144,10 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
     if (req.method === "POST" && path === "/logout") {
       const claims = await bearerUser(req);
       if (!claims) return authErr(res, 401, "bad_jwt", "invalid JWT");
-      for (const [k, v] of refreshTokens) if (v.userId === claims.sub) refreshTokens.delete(k);
+      const local = url.searchParams.get("scope") === "local"; // default "global": every session of the user
+      for (const [k, v] of refreshTokens) {
+        if (v.userId === claims.sub && (!local || v.sessionId === claims.session_id)) refreshTokens.delete(k);
+      }
       return send(res, 204);
     }
     if (path === "/user" && (req.method === "GET" || req.method === "PUT")) {
@@ -159,7 +169,8 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
         return authErr(res, 422, "weak_password", "Password should be at least 6 characters.");
       }
       const existing = await userByEmail(email);
-      if (existing) return send(res, 200, { id: randomBytes(16).toString("hex"), email }); // looks the same, sends nothing
+      if (existing && !existing.email_confirmed_at && !mail(existing.email, "email", existing.id)) return tooSoon(res); // re-sends
+      if (existing) return send(res, 200, { id: randomBytes(16).toString("hex"), email }); // confirmed: same answer, no mail
       const r = await db.query("insert into auth.users (email, encrypted_password) values ($1, $2) returning id",
         [email.toLowerCase(), hashPassword(body.password)]);
       mail(email.toLowerCase(), "email", r.rows[0].id);
@@ -167,12 +178,12 @@ export async function startFakeSupabase({ db, siteUrl = "http://localhost:3000",
     }
     if (req.method === "POST" && path === "/recover") {
       const user = await userByEmail(String(body.email || ""));
-      if (user) mail(user.email, "recovery", user.id);
+      if (user && !mail(user.email, "recovery", user.id)) return tooSoon(res);
       return send(res, 200, {});
     }
     if (req.method === "POST" && path === "/resend") {
       const user = await userByEmail(String(body.email || ""));
-      if (user && !user.email_confirmed_at && body.type === "signup") mail(user.email, "email", user.id);
+      if (user && !user.email_confirmed_at && body.type === "signup" && !mail(user.email, "email", user.id)) return tooSoon(res);
       return send(res, 200, {});
     }
     if (req.method === "POST" && path === "/verify") {

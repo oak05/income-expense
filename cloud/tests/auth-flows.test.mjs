@@ -2,6 +2,7 @@
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { startDev } from "../dev/server.mjs";
+import { setFakeNow } from "../dev/fake-supabase.mjs";
 
 const APP = { "x-requested-with": "fetch", "content-type": "application/json" };
 let dev, base;
@@ -41,7 +42,7 @@ test("sign up → email link → confirm → signed in with own default categori
 
   const v = await post("/api/verify", linkParams(mail));
   assert.equal(v.status, 200);
-  assert.deepEqual(await v.json(), { ok: true, next: "/" });
+  assert.deepEqual(await v.json(), { ok: true, next: "/", email }); // the page shows whose account this is
   const cookie = cookiesOf(v);
   assert.match(cookie, /sb_access=.+; sb_refresh=.+/);
   const cats = await (await rpc(cookie, "categories.list")).json();
@@ -76,9 +77,29 @@ test("unconfirmed login gets code email_not_confirmed; resend sends another link
   assert.equal(body.code, "email_not_confirmed");
   assert.match(body.detail, /ยืนยันอีเมล/);
   const before = dev.mailbox.length;
-  assert.equal((await post("/api/resend", { email })).status, 200);
+  setFakeNow(Date.now() + 61_000); // past Supabase's minimum interval between emails to one address
+  try {
+    assert.equal((await post("/api/resend", { email })).status, 200);
+  } finally {
+    setFakeNow(null);
+  }
   assert.equal(dev.mailbox.length, before + 1);
   assert.equal(lastMail().to, email);
+});
+
+test("asking twice in a row looks the same for registered and unknown emails", async () => {
+  const { email } = await signUpAndConfirm();
+  for (const path of ["/api/recover", "/api/resend"]) {
+    for (const who of [email, freshEmail()]) {
+      const first = await post(path, { email: who });
+      const second = await post(path, { email: who });
+      assert.deepEqual([first.status, second.status], [200, 200], `${path} ${who}`);
+      assert.deepEqual(await second.json(), { ok: true });
+    }
+  }
+  const unconfirmed = freshEmail();
+  assert.equal((await post("/api/signup", { email: unconfirmed, password: "password-123" })).status, 200);
+  assert.equal((await post("/api/signup", { email: unconfirmed, password: "password-123" })).status, 200);
 });
 
 test("a used or bogus link gives 410 link_expired", async () => {
@@ -98,11 +119,16 @@ test("a used or bogus link gives 410 link_expired", async () => {
 
 test("forgot password → link → new password works, old one doesn't", async () => {
   const { email, password } = await signUpAndConfirm();
-  assert.equal((await post("/api/recover", { email })).status, 200);
+  setFakeNow(Date.now() + 61_000); // a minute after the confirmation email (Supabase's interval per address)
+  try {
+    assert.equal((await post("/api/recover", { email })).status, 200);
+  } finally {
+    setFakeNow(null);
+  }
   const mail = lastMail();
   assert.equal(mail.type, "recovery");
   const v = await post("/api/verify", linkParams(mail));
-  assert.deepEqual(await v.json(), { ok: true, next: "/password.html?reset=1" });
+  assert.deepEqual(await v.json(), { ok: true, next: "/password.html?reset=1", email });
   const cookie = cookiesOf(v);
   let res = await post("/api/password", { password: "short" }, { cookie });
   assert.equal(res.status, 422);
@@ -169,4 +195,14 @@ test("delete account: wrong email refused; right email removes rows and every fi
 
 test("delete account needs a session", async () => {
   assert.equal((await post("/api/account", { action: "delete", email: "a@example.com" })).status, 401);
+});
+
+test("deleting the account right after a token refresh still clears the cookies", async () => {
+  const { email, cookie } = await signUpAndConfirm();
+  const refreshOnly = /sb_refresh=[^;]+/.exec(cookie)[0]; // forces a refresh inside the request
+  const res = await post("/api/account", { action: "delete", email }, { cookie: refreshOnly });
+  assert.equal(res.status, 200);
+  const set = res.headers.getSetCookie();
+  assert.equal(set.length, 2);
+  assert.ok(set.every((c) => /Max-Age=0/.test(c)), set.join(" | "));
 });

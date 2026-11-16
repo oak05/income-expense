@@ -72,6 +72,8 @@ export async function withUser(request, fn) {
     if (err instanceof AuthExpired) return signedOut();
     response = errorResponse(err);
   }
-  if (renewed) for (const c of sessionCookies(renewed)) response.headers.append("set-cookie", c);
+  // a handler that sets the session cookies itself (e.g. clears them after deleting the account) has the last word
+  const handlerSetsSession = response.headers.getSetCookie().some((c) => c.startsWith(ACCESS_COOKIE + "="));
+  if (renewed && !handlerSetsSession) for (const c of sessionCookies(renewed)) response.headers.append("set-cookie", c);
   return response;
 }

@@ -348,31 +348,56 @@ begin
 end;
 $$;
 
+create type private.import_row as (i integer, line text, ok boolean, type text, amount numeric, name text, note text, date date);
+
+/** The rows of a CSV import, numbered from 1, each checked (ok) and normalised, parsed once into an array. */
+create function private.import_rows(v_rows jsonb) returns private.import_row[]
+language plpgsql immutable as $$
+declare
+  out private.import_row[] := '{}';
+  r jsonb;
+  i integer := 0;
+  v_amount numeric;
+  v_ok boolean;
+begin
+  for r in select value from jsonb_array_elements(v_rows) loop
+    i := i + 1;
+    v_amount := case when jsonb_typeof(r) = 'object' then private.parse_amount(private.str(r -> 'amount')) end;
+    v_ok := jsonb_typeof(r) = 'object' and private.is_iso_date(r ->> 'date')
+      and coalesce(r ->> 'type', '') in ('income', 'expense')
+      and v_amount is not null and v_amount > 0 and v_amount <= 9999999999.99;
+    out := out || row(
+      i,
+      case when jsonb_typeof(r) = 'object' and coalesce(r ->> 'line', '') not in ('', '0', 'false')
+           then r ->> 'line' else (i + 1)::text end,
+      v_ok,
+      case when v_ok then r ->> 'type' end,
+      case when v_ok then v_amount end,
+      case when v_ok then coalesce(nullif(left(private.str(r -> 'category'), 50), ''), 'อื่นๆ') end,
+      case when v_ok then left(private.str(r -> 'note'), 500) end,
+      case when v_ok then (r ->> 'date')::date end
+    )::private.import_row;
+  end loop;
+  return out;
+end;
+$$;
+
 /**
  * CSV import. Rows already in the book (same date, type, category, amount and note) are skipped, one for one;
  * repeats inside the file are kept. Unknown categories are created. Bad rows are reported, not fatal.
+ * Done as whole-set queries so re-importing a big file against a big book stays fast.
  */
 create function public.api_transactions_import(p jsonb default '{}') returns jsonb
 language plpgsql security invoker set search_path = public, private as $$
 declare
   v_rows jsonb := p -> 'rows';
   v_colors text[] := array['#5B8DB8', '#B86F5B', '#6FA06B', '#9A6FB0', '#C29A3D', '#4E9A9A', '#B05B7A'];
-  v_existing jsonb;
   v_cat_count integer;
-  v_new_cats integer := 0;
   v_next_order integer;
-  v_errors text[] := '{}';
-  v_imported integer := 0;
-  v_skipped integer := 0;
-  r jsonb;
-  i integer := 0;
-  v_line text;
-  v_type text;
-  v_amount numeric;
-  v_name text;
-  v_note text;
-  v_cid bigint;
-  v_key text;
+  v_errors text[];
+  v_valid integer;
+  v_imported integer;
+  v_parsed private.import_row[];
 begin
   if jsonb_typeof(v_rows) is distinct from 'array' or jsonb_array_length(v_rows) = 0 then
     perform private.fail(400, 'ไม่มีรายการให้นำเข้า');
@@ -381,47 +406,48 @@ begin
     perform private.fail(413, 'นำเข้าได้ครั้งละไม่เกิน 5000 รายการ');
   end if;
 
-  select coalesce(jsonb_object_agg(k, n), '{}') into v_existing
-  from (select concat_ws(E'\n', date, type, category_id, amount, note) as k, count(*) as n
-        from transactions group by 1) e;
+  v_parsed := private.import_rows(v_rows);
+  select coalesce(array_agg('บรรทัด ' || r.line || ': ข้อมูลไม่ถูกต้อง' order by r.i) filter (where not r.ok), '{}'),
+         count(*) filter (where r.ok)
+  into v_errors, v_valid
+  from unnest(v_parsed) r;
+
+  -- categories the file names that the book doesn't have yet, in order of first appearance
   select count(*), coalesce(max(greatest(sort_order, 0)), 0) + 1 into v_cat_count, v_next_order from categories;
+  insert into categories (name, type, color, sort_order)
+  select n.name, n.type, v_colors[(v_cat_count + n.rk - 1) % 7 + 1], v_next_order + n.rk - 1
+  from (
+    select r.type, r.name, row_number() over (order by min(r.i)) as rk
+    from unnest(v_parsed) r
+    where r.ok and not exists (select 1 from categories c where c.type = r.type and c.name = r.name)
+    group by r.type, r.name
+  ) n
+  order by n.rk;
 
-  for r in select value from jsonb_array_elements(v_rows) loop
-    i := i + 1;
-    v_line := case when jsonb_typeof(r) = 'object' and coalesce(r ->> 'line', '') not in ('', '0', 'false')
-                   then r ->> 'line' else (i + 1)::text end;
-    v_type := case when jsonb_typeof(r) = 'object' then r ->> 'type' end;
-    v_amount := case when jsonb_typeof(r) = 'object' then private.parse_amount(private.str(r -> 'amount')) end;
-    if jsonb_typeof(r) is distinct from 'object' or not private.is_iso_date(r ->> 'date')
-       or v_type is null or v_type not in ('income', 'expense')
-       or v_amount is null or v_amount <= 0 or v_amount > 9999999999.99 then
-      v_errors := v_errors || ('บรรทัด ' || v_line || ': ข้อมูลไม่ถูกต้อง');
-      continue;
-    end if;
-    v_name := coalesce(nullif(left(private.str(r -> 'category'), 50), ''), 'อื่นๆ');
-    v_note := left(private.str(r -> 'note'), 500);
-
-    select id into v_cid from categories where type = v_type and name = v_name;
-    if not found then
-      insert into categories (name, type, color, sort_order)
-      values (v_name, v_type, v_colors[(v_cat_count + v_new_cats) % 7 + 1], v_next_order)
-      returning id into v_cid;
-      v_new_cats := v_new_cats + 1;
-      v_next_order := v_next_order + 1;
-    end if;
-
-    v_key := concat_ws(E'\n', (r ->> 'date')::date, v_type, v_cid, v_amount::numeric(14, 2), v_note);
-    if coalesce((v_existing ->> v_key)::int, 0) > 0 then -- the same row is already in the book -> skip it
-      v_existing := jsonb_set(v_existing, array[v_key], to_jsonb((v_existing ->> v_key)::int - 1));
-      v_skipped := v_skipped + 1;
-      continue;
-    end if;
+  -- the k-th copy of a row in the file is skipped while the book already holds at least k copies of it
+  with incoming as (
+    select r.i, r.type, r.amount, r.note, r.date, c.id as category_id,
+      row_number() over (partition by r.date, r.type, c.id, r.amount, r.note order by r.i) as copy_no
+    from unnest(v_parsed) r
+    join categories c on c.type = r.type and c.name = r.name
+    where r.ok
+  ), existing as (
+    select t.date, t.type, t.category_id, t.amount, t.note, count(*) as n
+    from transactions t
+    group by t.date, t.type, t.category_id, t.amount, t.note
+  ), inserted as (
     insert into transactions (type, amount, category_id, date, note)
-    values (v_type, v_amount, v_cid, (r ->> 'date')::date, v_note);
-    v_imported := v_imported + 1;
-  end loop;
+    select x.type, x.amount, x.category_id, x.date, x.note
+    from incoming x
+    left join existing e on e.date = x.date and e.type = x.type and e.category_id = x.category_id
+      and e.amount = x.amount and e.note = x.note
+    where x.copy_no > coalesce(e.n, 0)
+    order by x.i
+    returning 1
+  )
+  select count(*) into v_imported from inserted;
 
-  return jsonb_build_object('imported', v_imported, 'skipped_duplicates', v_skipped,
+  return jsonb_build_object('imported', v_imported, 'skipped_duplicates', v_valid - v_imported,
     'errors', to_jsonb(v_errors[1:20]), 'error_count', coalesce(array_length(v_errors, 1), 0));
 end;
 $$;

@@ -102,10 +102,13 @@ export async function refresh(refreshToken, cfg = config()) {
   throw authError(body, res.status);
 }
 
-/** Ends the session on Supabase (revokes its refresh tokens). Best effort: signing out locally always works. */
+/**
+ * Ends this session on Supabase (revokes its refresh token). scope=local: other devices stay signed in.
+ * Best effort: signing out locally always works.
+ */
 export async function signOut(accessToken, cfg = config()) {
   try {
-    await request(cfg, "/auth/v1/logout", { token: accessToken });
+    await request(cfg, "/auth/v1/logout?scope=local", { token: accessToken });
   } catch { /* the cookies are cleared anyway */ }
 }
 
@@ -127,16 +130,30 @@ export async function updatePassword(accessToken, password, cfg = config()) {
   throw authError(body, res.status);
 }
 
+/**
+ * Requests that send an email. Supabase refuses a second email to the same address within a minute (429) but
+ * answers silently for unknown addresses, so passing its 429 on would tell anyone which emails have an account.
+ * It is treated as done instead; this app's own limit (5 per hour per caller) is the one people see.
+ */
+async function emailCall(path, body, cfg) {
+  try {
+    await authCall(path, { body }, cfg);
+  } catch (err) {
+    if (!(err instanceof HttpError && err.status === 429)) throw err;
+    console.warn("supabase email interval:", path);
+  }
+}
+
 export async function signUp(email, password, cfg = config()) {
-  await authCall("/signup", { body: { email, password } }, cfg);
+  await emailCall("/signup", { email, password }, cfg);
 }
 
 export async function recover(email, cfg = config()) {
-  await authCall("/recover", { body: { email } }, cfg);
+  await emailCall("/recover", { email }, cfg);
 }
 
 export async function resend(email, cfg = config()) {
-  await authCall("/resend", { body: { type: "signup", email } }, cfg);
+  await emailCall("/resend", { type: "signup", email }, cfg);
 }
 
 /** Uses a one-time link from an email (sign-up confirmation or password reset) and returns the new session. */

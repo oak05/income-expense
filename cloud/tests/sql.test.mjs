@@ -519,3 +519,18 @@ test("storage policy: B cannot see or write A's objects", async () => {
   await assert.rejects(asUser(db, b, "insert into storage.objects (bucket_id, name, owner) values ('receipts', $1, $2)", [`${a}/2.jpg`, b]));
   await assert.rejects(asUser(db, a, "insert into storage.objects (bucket_id, name, owner) values ('other', $1, $2)", [`${a}/2.jpg`, a]));
 });
+
+test("re-importing a large file against a large book stays fast", async () => {
+  const { db, a, call, cats } = await start();
+  const food = cats["expense:อาหารและเครื่องดื่ม"];
+  await db.query(`insert into transactions (user_id, type, amount, category_id, date, note)
+    select $1, 'expense', 1 + (g % 500), $2, date '2020-01-01' + (g % 1500), 'n' || g from generate_series(1, 10000) g`, [a, food]);
+  const rows = (await db.query(`select to_char(date, 'YYYY-MM-DD') as date, amount::text as amount, note
+    from transactions order by id limit 5000`)).rows
+    .map((r, i) => ({ line: i + 2, date: r.date, type: "expense", category: "อาหารและเครื่องดื่ม", amount: r.amount, note: r.note }));
+  const t0 = Date.now();
+  const r = await call("transactions.import", { rows });
+  const ms = Date.now() - t0;
+  assert.deepEqual([r.imported, r.skipped_duplicates], [0, 5000]);
+  assert.ok(ms < 1500, `took ${ms} ms`);
+});
