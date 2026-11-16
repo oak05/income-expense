@@ -378,3 +378,15 @@ test("the pages contain no inline scripts or handlers (the CSP would block them)
   }
 });
 
+test("signed-in pages offer change password and delete account, and no Google Sheet link", () => {
+  for (const page of ["index.html", "receipts.html"]) {
+    const html = readFileSync(new URL(`../vercel/public/${page}`, import.meta.url), "utf8");
+    assert.ok(html.includes('href="/password.html"'), `${page}: change password`);
+    assert.ok(html.includes("data-delete-account"), `${page}: delete account`);
+    assert.ok(html.includes('id="delete-account-dialog"'), `${page}: delete dialog`);
+    assert.ok(!/sheet-link|folder-link|Google Sheet/.test(html), `${page}: no Google Sheet`);
+    assert.ok(!html.includes("v=2.1.0"), `${page}: version strings`);
+  }
+  const app = readFileSync(new URL("../vercel/public/app.js", import.meta.url), "utf8");
+  assert.ok(!/sheet_url|showSheetLinks/.test(app));
+});

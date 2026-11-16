@@ -51,7 +51,7 @@ function goToLogin() {
   location.replace("/login.html" + (next && next !== "/" ? "?next=" + encodeURIComponent(next) : ""));
 }
 
-/** Calls the backend (Google Sheet) through /api/rpc, e.g. rpc("month.get", {month: "2026-11"}). */
+/** Calls the app's database (Supabase) through /api/rpc, e.g. rpc("month.get", {month: "2026-11"}). */
 async function rpc(action, params = {}) {
   try {
     return await apiPost("/api/rpc", { action, params });
@@ -135,4 +135,34 @@ function budgetSpent(byCategoryExpense, categoryId, minus = 0) {
 
 document.addEventListener("click", (e) => {
   if (e.target.closest("[data-logout]")) logout();
+  if (e.target.closest("[data-delete-account]")) openDeleteAccount();
+});
+
+/* Delete account: the user types their email; the server checks it again, removes the files, then the account. */
+function openDeleteAccount() {
+  const dialog = $("#delete-account-dialog");
+  if (!dialog) return;
+  const menu = $("#more-menu");
+  if (menu) menu.hidden = true;
+  $("#delete-account-email").value = "";
+  $("#delete-account-error").hidden = true;
+  $("#delete-account-btn").disabled = false;
+  dialog.showModal();
+}
+
+document.addEventListener("submit", async (e) => {
+  if (e.target.id !== "delete-account-form" || e.submitter?.value !== "confirm") return;
+  e.preventDefault();
+  const btn = $("#delete-account-btn"), error = $("#delete-account-error");
+  error.hidden = true;
+  btn.disabled = true;
+  try {
+    await apiPost("/api/account", { action: "delete", email: $("#delete-account-email").value });
+    location.replace("/login.html?deleted=1");
+  } catch (err) {
+    if (err.status === 401) return goToLogin();
+    error.textContent = err.message;
+    error.hidden = false;
+    btn.disabled = false;
+  }
 });

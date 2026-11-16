@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#0B1220" media="(prefers-color-scheme: dark)">
   <title>สมุดรายรับรายจ่าย</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='8' fill='%232F5BEA'/%3E%3Cpath d='M10 20.5l4-4.5 3 3 5-6.5' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/style.css?v=2.1.0">
+  <link rel="stylesheet" href="/style.css?v=3.0.0">
 </head>
 <body>
   <a class="skip" href="#main">ข้ามไปที่เนื้อหา</a>
@@ -44,6 +44,12 @@
         </button>
         <button class="nav-item" type="button" data-open="data">
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-database"/></svg>นำเข้า / ส่งออก
+        </button>
+<a class="nav-item" href="/password.html">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-wallet"/></svg>เปลี่ยนรหัสผ่าน
+        </a>
+        <button class="nav-item" type="button" data-delete-account>
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-trash"/></svg>ลบบัญชี
         </button>
         <button class="nav-item" type="button" data-logout>
           <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-logout"/></svg>ออกจากระบบ
@@ -85,6 +91,12 @@
             </button>
             <button class="menu-item" type="button" data-open="data">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-database"/></svg>นำเข้า / ส่งออก
+            </button>
+<a class="menu-item" href="/password.html">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-wallet"/></svg>เปลี่ยนรหัสผ่าน
+            </a>
+            <button class="menu-item" type="button" data-delete-account>
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-trash"/></svg>ลบบัญชี
             </button>
             <button class="menu-item" type="button" data-logout>
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#i-logout"/></svg>ออกจากระบบ
@@ -408,27 +420,37 @@
       </section>
 
       <section class="data-block">
-        <h3 class="section-title">ข้อมูลอยู่ใน Google Sheet ของคุณ</h3>
-        <p>ทุกรายการเก็บใน Google Sheet และรูปใบเสร็จอยู่ใน Google Drive ของบัญชีคุณเอง
-          ย้อนดูหรือกู้คืนข้อมูลเก่าได้จากเมนู ไฟล์ → ประวัติเวอร์ชัน ใน Google Sheet
-          และสำรองเพิ่มได้ด้วย ไฟล์ → ทำสำเนา</p>
-        <div class="data-actions">
-          <a class="btn btn-secondary" id="sheet-link" href="#" target="_blank" rel="noopener" hidden>
-            <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-file"/></svg>เปิด Google Sheet
-          </a>
-          <a class="btn btn-secondary" id="folder-link" href="#" target="_blank" rel="noopener" hidden>
-            <svg class="icon icon-sm" aria-hidden="true"><use href="/icons.svg#i-receipt"/></svg>เปิดโฟลเดอร์ใบเสร็จ
-          </a>
-        </div>
+        <h3 class="section-title">บัญชีของคุณ</h3>
+        <p id="account-line">ข้อมูลทั้งหมดเก็บแยกตามบัญชี คนอื่นมองไม่เห็น เข้าสู่ระบบด้วย <strong id="account-email">—</strong></p>
+        <p>สำรองข้อมูลได้ด้วยปุ่มดาวน์โหลด CSV ด้านบน</p>
       </section>
     </div>
+  </dialog>
+
+  <!-- ============ Delete account ============ -->
+  <dialog class="sheet sheet-sm" id="delete-account-dialog" aria-labelledby="del-acc-title">
+    <form method="dialog" id="delete-account-form">
+      <header class="sheet-head"><h2 id="del-acc-title">ลบบัญชี</h2></header>
+      <div class="sheet-body">
+        <p>ลบบัญชีและข้อมูลทั้งหมด (รายการ หมวดหมู่ ใบเสร็จ) ย้อนกลับไม่ได้ — พิมพ์อีเมลของคุณเพื่อยืนยัน</p>
+        <div class="field">
+          <label class="field-label" for="delete-account-email">อีเมลของบัญชีนี้</label>
+          <input class="input" type="email" id="delete-account-email" autocomplete="off" required>
+        </div>
+        <p class="form-error" id="delete-account-error" role="alert" hidden></p>
+      </div>
+      <footer class="sheet-foot">
+        <button class="btn btn-secondary" value="cancel" formnovalidate>ยกเลิก</button>
+        <button class="btn btn-danger-solid" value="confirm" id="delete-account-btn">ลบบัญชีถาวร</button>
+      </footer>
+    </form>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script src="/vendor/chart.umd.min.js"></script>
-  <script src="/common.js?v=2.1.0"></script>
-  <script src="/csv.js?v=2.1.0"></script>
-  <script src="/app.js?v=2.1.0"></script>
+  <script src="/common.js?v=3.0.0"></script>
+  <script src="/csv.js?v=3.0.0"></script>
+  <script src="/app.js?v=3.0.0"></script>
 </body>
 </html>

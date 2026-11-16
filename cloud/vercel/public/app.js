@@ -728,20 +728,14 @@ function openPanel(name) {
     $("#import-result").textContent = "";
     $("#export-result").textContent = "";
     dataDialog.showModal();
-    showSheetLinks();
+    showAccount();
   }
 }
 
-/** Links to the Google Sheet and the receipts folder; a convenience, the dialog works without them. */
-async function showSheetLinks() {
+/** "Signed in as …" in the import/export dialog; a convenience, the dialog works without it. */
+async function showAccount() {
   try {
-    const info = await rpc("info");
-    $("#sheet-link").href = info.sheet_url;
-    $("#sheet-link").hidden = false;
-    if (info.folder_url) {
-      $("#folder-link").href = info.folder_url;
-      $("#folder-link").hidden = false;
-    }
+    $("#account-email").textContent = (await rpc("info")).email || "—";
   } catch { /* ignore */ }
 }
 
