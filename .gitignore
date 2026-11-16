@@ -9,3 +9,5 @@ tessdata/
 
 logs/
 node_modules/
+.vercel
+.env*
